@@ -77,6 +77,86 @@ flowchart LR
 
 ![配置与审计](docs/img_6.png)
 
+## 下载与部署
+
+### 下载地址
+
+- JAR 包：[ops-monitor.jar](https://github.com/kllin8154-arch/ops-monitor/releases/download/v1.0.0/ops-monitor.jar)
+- Docker 镜像：`ghcr.io/kllin8154-arch/ops-monitor:1.0.0`
+- Docker latest：`ghcr.io/kllin8154-arch/ops-monitor:latest`
+
+默认监控组件镜像：
+
+```text
+prom/prometheus:latest
+prom/alertmanager:latest
+grafana/grafana:latest
+prom/node-exporter:latest
+victoriametrics/victoria-metrics:latest
+```
+
+### 在线部署
+
+在线环境可以直接拉取源码、启动监控组件，再运行 JAR：
+
+```powershell
+git clone https://github.com/kllin8154-arch/ops-monitor.git
+cd ops-monitor/app
+docker compose -f docker/docker-compose.yml up -d
+Invoke-WebRequest -Uri https://github.com/kllin8154-arch/ops-monitor/releases/download/v1.0.0/ops-monitor.jar -OutFile ops-monitor.jar
+java -jar ops-monitor.jar
+```
+
+也可以直接使用 Docker 镜像运行控制平面：
+
+```powershell
+docker pull ghcr.io/kllin8154-arch/ops-monitor:1.0.0
+docker run -d --name ops-monitor `
+  -p 8080:8080 `
+  -e SERVER_ADDRESS=0.0.0.0 `
+  -e OPS_ADMIN_PASSWORD=ChangeMe_Admin_123! `
+  -e OPS_GRAFANA_PASSWORD=ChangeMe_Grafana_123! `
+  -e OPS_HMAC_SECRET=replace-with-at-least-32-random-characters `
+  -v ${PWD}/app/docker:/app/docker `
+  -v ${PWD}/app/data:/app/data `
+  ghcr.io/kllin8154-arch/ops-monitor:1.0.0
+```
+
+### 离线部署
+
+离线环境建议先在有网机器上准备 JAR、源码配置和 Docker 镜像包：
+
+```powershell
+git clone https://github.com/kllin8154-arch/ops-monitor.git
+Invoke-WebRequest -Uri https://github.com/kllin8154-arch/ops-monitor/releases/download/v1.0.0/ops-monitor.jar -OutFile ops-monitor.jar
+
+docker pull ghcr.io/kllin8154-arch/ops-monitor:1.0.0
+docker pull prom/prometheus:latest
+docker pull prom/alertmanager:latest
+docker pull grafana/grafana:latest
+docker pull prom/node-exporter:latest
+docker pull victoriametrics/victoria-metrics:latest
+
+docker save -o ops-monitor-images.tar `
+  ghcr.io/kllin8154-arch/ops-monitor:1.0.0 `
+  prom/prometheus:latest `
+  prom/alertmanager:latest `
+  grafana/grafana:latest `
+  prom/node-exporter:latest `
+  victoriametrics/victoria-metrics:latest
+```
+
+把 `ops-monitor.jar`、`ops-monitor-images.tar` 和仓库中的 `app/docker/` 目录拷贝到离线服务器，并将 JAR 放到 `ops-monitor/app/ops-monitor.jar` 后执行：
+
+```powershell
+docker load -i ops-monitor-images.tar
+cd ops-monitor/app
+docker compose -f docker/docker-compose.yml up -d
+java -jar ops-monitor.jar
+```
+
+离线环境如果还需要 MySQL、Redis、Nginx、PostgreSQL、Windows Exporter 等扩展监控，请提前在有网机器上拉取对应 Exporter 镜像并追加到 `docker save` 命令中。
+
 ## 快速开始
 
 ### 环境要求

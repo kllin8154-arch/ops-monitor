@@ -77,6 +77,86 @@ Screenshots are stored in the `docs/` directory.
 
 ![Config and Audit](docs/img_6.png)
 
+## Downloads and Deployment
+
+### Download URLs
+
+- JAR package: [ops-monitor.jar](https://github.com/kllin8154-arch/ops-monitor/releases/download/v1.0.0/ops-monitor.jar)
+- Docker image: `ghcr.io/kllin8154-arch/ops-monitor:1.0.0`
+- Docker latest: `ghcr.io/kllin8154-arch/ops-monitor:latest`
+
+Default monitoring component images:
+
+```text
+prom/prometheus:latest
+prom/alertmanager:latest
+grafana/grafana:latest
+prom/node-exporter:latest
+victoriametrics/victoria-metrics:latest
+```
+
+### Online Deployment
+
+For online environments, clone the repository, start the monitoring components, and run the JAR:
+
+```powershell
+git clone https://github.com/kllin8154-arch/ops-monitor.git
+cd ops-monitor/app
+docker compose -f docker/docker-compose.yml up -d
+Invoke-WebRequest -Uri https://github.com/kllin8154-arch/ops-monitor/releases/download/v1.0.0/ops-monitor.jar -OutFile ops-monitor.jar
+java -jar ops-monitor.jar
+```
+
+You can also run the control plane with the Docker image:
+
+```powershell
+docker pull ghcr.io/kllin8154-arch/ops-monitor:1.0.0
+docker run -d --name ops-monitor `
+  -p 8080:8080 `
+  -e SERVER_ADDRESS=0.0.0.0 `
+  -e OPS_ADMIN_PASSWORD=ChangeMe_Admin_123! `
+  -e OPS_GRAFANA_PASSWORD=ChangeMe_Grafana_123! `
+  -e OPS_HMAC_SECRET=replace-with-at-least-32-random-characters `
+  -v ${PWD}/app/docker:/app/docker `
+  -v ${PWD}/app/data:/app/data `
+  ghcr.io/kllin8154-arch/ops-monitor:1.0.0
+```
+
+### Offline Deployment
+
+For offline environments, prepare the JAR, repository config, and Docker image archive on an internet-connected machine:
+
+```powershell
+git clone https://github.com/kllin8154-arch/ops-monitor.git
+Invoke-WebRequest -Uri https://github.com/kllin8154-arch/ops-monitor/releases/download/v1.0.0/ops-monitor.jar -OutFile ops-monitor.jar
+
+docker pull ghcr.io/kllin8154-arch/ops-monitor:1.0.0
+docker pull prom/prometheus:latest
+docker pull prom/alertmanager:latest
+docker pull grafana/grafana:latest
+docker pull prom/node-exporter:latest
+docker pull victoriametrics/victoria-metrics:latest
+
+docker save -o ops-monitor-images.tar `
+  ghcr.io/kllin8154-arch/ops-monitor:1.0.0 `
+  prom/prometheus:latest `
+  prom/alertmanager:latest `
+  grafana/grafana:latest `
+  prom/node-exporter:latest `
+  victoriametrics/victoria-metrics:latest
+```
+
+Copy `ops-monitor.jar`, `ops-monitor-images.tar`, and the repository `app/docker/` directory to the offline server. Place the JAR at `ops-monitor/app/ops-monitor.jar`, then run:
+
+```powershell
+docker load -i ops-monitor-images.tar
+cd ops-monitor/app
+docker compose -f docker/docker-compose.yml up -d
+java -jar ops-monitor.jar
+```
+
+If the offline environment also needs MySQL, Redis, Nginx, PostgreSQL, Windows Exporter, or other monitoring targets, pull the corresponding exporter images on the online machine and append them to the `docker save` command.
+
 ## Quick Start
 
 ### Requirements
