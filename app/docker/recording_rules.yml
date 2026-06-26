@@ -1,0 +1,32 @@
+groups:
+  - name: sli_recording
+    interval: 30s
+    rules:
+      - record: instance:node_cpu_utilization:rate5m
+        expr: >
+          1 - avg without(cpu, mode)(
+            rate(node_cpu_seconds_total{mode="idle"}[5m])
+          )
+      - record: instance:node_memory_utilization:ratio
+        expr: >
+          1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes
+      - record: instance:node_disk_utilization:ratio
+        expr: >
+          1 - (
+            node_filesystem_avail_bytes{mountpoint="/",fstype!="tmpfs"}
+            / node_filesystem_size_bytes{mountpoint="/",fstype!="tmpfs"}
+          )
+      - record: instance:windows_cpu_utilization:rate5m
+        expr: >
+          1 - sum by(instance,server_name)(
+            rate(windows_cpu_time_total{mode="idle"}[5m])
+          ) / sum by(instance,server_name)(
+            rate(windows_cpu_time_total[5m])
+          )
+  - name: exporter_sli
+    interval: 30s
+    rules:
+      - record: ops:exporter_availability:ratio
+        expr: avg(up{managed_by="ops-monitor"})
+      - record: ops:exporter_availability_by_server:ratio
+        expr: avg by(server_id,server_name)(up{managed_by="ops-monitor"})

@@ -1,0 +1,71 @@
+groups:
+  - name: infrastructure
+    rules:
+      - alert: HighCPU
+        expr: 100-(avg(rate(node_cpu_seconds_total{mode="idle"}[5m]))*100)>80
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CPU 使用率过高 ({{ $labels.instance }})"
+          description: "CPU > 80%, 当前: {{ $value }}%"
+      - alert: HighMemory
+        expr: (1-node_memory_MemAvailable_bytes/node_memory_MemTotal_bytes)*100>85
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "内存使用率过高 ({{ $labels.instance }})"
+          description: "内存 > 85%, 当前: {{ $value }}%"
+      - alert: HighDisk
+        expr: (1-node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"}/node_filesystem_size_bytes{fstype!~"tmpfs|overlay"})*100>90
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "磁盘使用率过高 ({{ $labels.instance }})"
+          description: "磁盘 > 90%, 当前: {{ $value }}%"
+  - name: exporters
+    rules:
+      - alert: ExporterDown
+        expr: up{managed_by="ops-monitor"}==0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Exporter 离线 ({{ $labels.exporter_type }})"
+          description: "{{ $labels.server_name }} 的 {{ $labels.exporter_type }} 已离线"
+      - alert: NginxDown
+        expr: up{exporter_type="nginx",managed_by="ops-monitor"}==0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Nginx 离线 ({{ $labels.server_name }})"
+          description: "{{ $labels.server_name }} Nginx Exporter 离线 1 分钟"
+      - alert: ExporterFlapping
+        expr: changes(up{managed_by="ops-monitor"}[5m])>3
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Exporter 状态抖动 ({{ $labels.exporter_type }})"
+          description: "{{ $labels.server_name }} 的 {{ $labels.exporter_type }} 5分钟内状态变化 {{ $value }} 次"
+  - name: platform
+    rules:
+      - alert: AgentDown
+        expr: agent_uptime_seconds==0 or absent(agent_uptime_seconds)
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Agent 离线 ({{ $labels.agent_id }})"
+          description: "Agent {{ $labels.agent_id }} 已离线超过 2 分钟"
+      - alert: RemoteWriteFail
+        expr: increase(agent_remote_write_failures_total[5m])>5
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Remote Write 失败 ({{ $labels.agent_id }})"
+          description: "Agent {{ $labels.agent_id }} 5分钟内写入失败 {{ $value }} 次"

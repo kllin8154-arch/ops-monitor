@@ -1,0 +1,1029 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpsMonitor Admin</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>⊡</text></svg>">
+    <link rel="stylesheet" href="/admin.css">
+    <link rel="stylesheet" href="/admin-console.css">
+    <!-- Vue 3：先尝试本地离线版，失败再用 CDN，确保 Vue 在 admin-app.js 之前就绪 -->
+    <script>
+        (function() {
+            // 动态加载 Vue，成功后再加载 admin-app.js，避免空白页
+            function loadScript(src, onload, onerror) {
+                var s = document.createElement('script');
+                s.src = src;
+                s.onload = onload;
+                s.onerror = onerror;
+                document.head.appendChild(s);
+            }
+            function loadApp() {
+                loadScript('/admin-app.js', null, function() {
+                    document.getElementById('app').innerHTML =
+                        '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;color:#64748b">'
+                        + '<div style="text-align:center"><div style="font-size:40px;margin-bottom:12px">⚠️</div>'
+                        + '<div style="font-size:16px;font-weight:600;color:#1e293b;margin-bottom:8px">Admin 脚本加载失败</div>'
+                        + '<div style="font-size:13px">请检查 admin-app.js 是否位于 static/ 目录</div></div></div>';
+                });
+            }
+            loadScript('/vue.global.prod.min.js', loadApp, function() {
+                document.getElementById('app').innerHTML =
+                    '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;color:#64748b">'
+                    + '<div style="text-align:center"><div style="font-size:40px;margin-bottom:12px">❌</div>'
+                    + '<div style="font-size:16px;font-weight:600;color:#1e293b;margin-bottom:8px">Vue 加载失败</div>'
+                    + '<div style="font-size:13px">请将 vue.global.prod.min.js 放入 static/ 目录</div></div></div>';
+            });
+        })();
+    </script>
+</head>
+<body>
+<div id="app">
+    <!-- Vue 就绪前显示加载占位 -->
+    <div style="display:flex;align-items:center;justify-content:center;height:100vh;background:#f1f5f9">
+        <div style="text-align:center;color:#64748b;font-family:sans-serif">
+            <div style="font-size:36px;margin-bottom:12px;animation:spin 1.2s linear infinite;display:inline-block">⏳</div>
+            <div style="font-size:14px">正在加载...</div>
+        </div>
+    </div>
+    <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+</div>
+
+<!-- ===== 以下为 Vue 模板，由 admin-app.js 挂载后替换 #app 内容 ===== -->
+<template id="app-template">
+
+    <!-- Toast 通知容器 -->
+    <div class="toast-container">
+        <div v-for="t in toasts" :key="t.id" :id="'toast-'+t.id"
+             class="toast" :class="'toast-'+t.type">
+            <span class="toast-icon">{{t.icon}}</span>
+            <span class="toast-msg">{{t.msg}}</span>
+        </div>
+    </div>
+
+    <!-- 登录页 -->
+    <div class="login-overlay" v-if="!loggedIn">
+        <div class="login-box">
+            <div class="login-logo">⊡</div>
+            <h2>OpsMonitor</h2>
+            <div class="sub">{{appVersion || 'v2.22'}} — 企业级分布式监控平台</div>
+            <div class="login-field">
+                <label>用户名</label>
+                <input v-model="loginForm.username" placeholder="admin" @keyup.enter="doLogin" autocomplete="username">
+            </div>
+            <div class="login-field">
+                <label>密码</label>
+                <input v-model="loginForm.password" type="password" placeholder="••••••••" @keyup.enter="doLogin" autocomplete="current-password">
+            </div>
+            <button class="login-btn" @click="doLogin" :disabled="loginLoading">
+                {{loginLoading ? '登录中...' : '登 录'}}
+            </button>
+            <div class="login-err" v-if="loginError">{{loginError}}</div>
+        </div>
+    </div>
+
+    <!-- 主界面 -->
+    <div class="app" v-if="loggedIn">
+
+        <!-- 侧边栏 -->
+        <div class="sidebar" :class="{'sidebar-collapsed': sidebarCollapsed}" @mouseenter="onSidebarEnter" @mouseleave="onSidebarLeave">
+            <div class="sidebar-brand">
+                <span class="brand-icon">
+                    <svg width="28" height="28" viewBox="0 0 28 28" style="display:block">
+                        <rect width="28" height="28" rx="6" fill="rgba(59,130,246,.2)"/>
+                        <text x="6" y="20" font-family="Georgia,serif" font-size="16" font-weight="700" fill="#3b82f6">O</text>
+                        <circle cx="21" cy="14" r="3" fill="#22c55e" opacity=".8"/>
+                    </svg>
+                </span>
+                <transition name="fade-text">
+                    <div class="brand-text">
+                        <h1>OpsMonitor</h1>
+                        <span class="version">{{appVersion || 'v2.22'}}</span>
+                    </div>
+                </transition>
+            </div>
+
+            <nav class="nav-section">
+                <div class="nav-section-label">监控</div>
+                <div class="nav-item" :class="{active:page==='dashboard'}"
+                     @click="navigate('dashboard', loadDashboard)"
+                     :title="sidebarCollapsed?'总览':''">
+                    <span class="nav-icon">⊡</span>
+                    <span class="nav-label">总览</span>
+                </div>
+                <div class="nav-item" :class="{active:page==='agents'}"
+                     @click="navigate('agents', loadAgents)"
+                     :title="sidebarCollapsed?'Agent 管理':''">
+                    <span class="nav-icon">⚙</span>
+                    <span class="nav-label">Agent 管理</span>
+                </div>
+                <div class="nav-item" :class="{active:page==='exporters'}"
+                     @click="navigate('exporters', loadExporters)"
+                     :title="sidebarCollapsed?'Exporter':''">
+                    <span class="nav-icon">⊕</span>
+                    <span class="nav-label">Exporter</span>
+                </div>
+                <div class="nav-item" :class="{active:page==='alerts'}"
+                     @click="navigate('alerts', loadAlerts)"
+                     :title="sidebarCollapsed?'告警中心':''">
+                    <span class="nav-icon">⚠</span>
+                    <span class="nav-label">告警中心</span>
+                    <transition name="badge-pop">
+                        <span class="nav-badge" v-if="firingCount>0">{{firingCount}}</span>
+                    </transition>
+                </div>
+                <div class="nav-item" :class="{active:page==='sentinel'}"
+                     @click="navigate('sentinel', loadSentinel)"
+                     :title="sidebarCollapsed?'Sentinel 自动化':''">
+                    <span class="nav-icon">◈️</span>
+                    <span class="nav-label">Sentinel</span>
+                    <span class="nav-badge" v-if="sentinelOpenCount>0" style="background:#f59e0b">{{sentinelOpenCount}}</span>
+                </div>
+            </nav>
+
+            <nav class="nav-section">
+                <div class="nav-section-label">管理</div>
+                <div class="nav-item" :class="{active:page==='topology'}" @click="navigate('topology', loadTopology)" :title="sidebarCollapsed?'服务拓扑':''">
+                    <span class="nav-icon">⊞</span><span class="nav-label">服务拓扑</span>
+                </div>
+                <div class="nav-item" :class="{active:page==='notify'}" @click="navigate('notify', loadNotifyChannels)" :title="sidebarCollapsed?'通知渠道':''">
+                    <span class="nav-icon">✉</span><span class="nav-label">通知渠道</span>
+                </div>
+                <div class="nav-item" :class="{active:page==='config'}" @click="navigate('config', loadConfigs)" :title="sidebarCollapsed?'配置中心':''">
+                    <span class="nav-icon">⚙</span><span class="nav-label">配置中心</span>
+                </div>
+                <div class="nav-item" :class="{active:page==='tenants'}" @click="navigate('tenants', loadTenants)" :title="sidebarCollapsed?'租户管理':''">
+                    <span class="nav-icon">◫</span><span class="nav-label">租户管理</span>
+                </div>
+                <div class="nav-item" :class="{active:page==='audit'}" @click="navigate('audit', loadAudit)" :title="sidebarCollapsed?'系统审计':''">
+                    <span class="nav-icon">⚖</span><span class="nav-label">系统审计</span>
+                </div>
+                <div class="nav-item" :class="{active:page==='users'}" @click="navigate('users', loadUsers)" :title="sidebarCollapsed?'用户管理':''">
+                    <span class="nav-icon">⊙</span><span class="nav-label">用户管理</span>
+                </div>
+            </nav>
+
+            <nav class="nav-section">
+                <div class="nav-section-label">跳转</div>
+                <div class="nav-item nav-item-classic" @click="goClassic()" :title="sidebarCollapsed?'经典界面':''">
+                    <span class="nav-icon">⊡</span><span class="nav-label">经典界面</span>
+                </div>
+                <div class="nav-item" @click="goGrafana()" :title="sidebarCollapsed?'Grafana':''">
+                    <span class="nav-icon">⧩</span><span class="nav-label">Grafana</span>
+                </div>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="nav-item" @click="toggleTheme()" title="切换主题">
+                    <span class="nav-icon">{{currentTheme==='console'?'☀️':'🌙'}}</span>
+                    <span class="nav-label">{{currentTheme==='console'?'浅色主题':'深色主题'}}</span>
+                </div>
+                <div class="nav-item nav-item-danger" @click="doLogout()" :title="sidebarCollapsed?'退出登录':''">
+                    <span class="nav-icon">🚪</span><span class="nav-label">退出登录</span>
+                </div>
+                <transition name="fade-text">
+                    <div class="user-info">
+                        <div class="user-avatar">{{userInitial}}</div>
+                        <span class="user-name">{{currentUser}}</span>
+                    </div>
+                </transition>
+            </div>
+
+            <!-- 折叠按钮 -->
+            <button class="sidebar-toggle-btn" :class="{pinned:sidebarPinned}" @click="toggleSidebar"
+                    :title="sidebarCollapsed?'点击固定侧边栏':'点击收起侧边栏'">
+                <span class="toggle-arrow" :class="{'toggle-arrow-right': sidebarCollapsed}">{{sidebarCollapsed?'▶':'‹'}}</span>
+            </button>
+        </div>
+
+        <!-- 主内容 -->
+        <div class="main" :class="{'main-collapsed': sidebarCollapsed}">
+
+            <!-- 顶部加载进度条 -->
+            <div class="loading-bar" v-if="loading"></div>
+
+            <!-- ===== 总览 ===== -->
+            <div v-if="page==='dashboard'" class="page-enter">
+                <div class="page-header">
+                    <div>
+                        <div class="page-title">系统总览</div>
+                        <div class="page-subtitle">实时监控平台运行状态，每 12 秒自动刷新</div>
+                    </div>
+                    <button class="btn btn-ghost btn-sm" @click="loadDashboard()">🔄 刷新</button>
+                </div>
+                <div class="stat-grid">
+                    <div class="stat-card accent-info">
+                        <div class="label">Agent 节点</div>
+                        <div class="value txt-info">{{overview.agentTotal||0}}</div>
+                        <div class="sub">在线 <b style="color:#22c55e">{{overview.agentOnline||0}}</b> / 总计 {{overview.agentTotal||0}}</div>
+                        <div class="stat-icon">⚙</div>
+                    </div>
+                    <div class="stat-card accent-ok">
+                        <div class="label">Exporter</div>
+                        <div class="value txt-ok">{{overview.exporterUp||0}}</div>
+                        <div class="sub">运行 <b style="color:#22c55e">{{overview.exporterUp||0}}</b> / 总计 {{overview.exporterTotal||0}}</div>
+                        <div class="stat-icon">⊕</div>
+                    </div>
+                    <div class="stat-card" :style="{'--accent-color': alertCount>0?'#ef4444':'#22c55e'}">
+                        <div class="label">活跃告警</div>
+                        <div class="value" :style="{color: alertCount>0?'#ef4444':'#22c55e'}">{{alertCount}}</div>
+                        <div class="sub" v-if="alertCount>0">严重 {{alerts.filter(a=>a.severity==='critical').length}} / 警告 {{alerts.filter(a=>a.severity==='warning').length}}</div>
+                        <div class="sub" v-else style="color:#22c55e">✅ 无活跃告警</div>
+                        <div class="stat-icon">⚠</div>
+                    </div>
+                    <div class="stat-card" :style="{'--accent-color': overview.auditGrade==='A'?'#22c55e':'#f59e0b'}">
+                        <div class="label">审计评分</div>
+                        <div class="value" :style="{color: overview.auditGrade==='A'?'#22c55e':'#f59e0b'}">
+                            {{overview.auditScore||'--'}}<span style="font-size:16px;margin-left:4px">{{overview.auditGrade||''}}</span>
+                        </div>
+                        <div class="sub">安全等级评估</div>
+                        <div class="stat-icon">◈</div>
+                    </div>
+                </div>
+                <!-- v2.19: 系统健康摘要条 -->
+                <div v-if="healthSummary.text" class="card" style="margin-bottom:16px"
+                     :style="{borderLeft: '4px solid ' + (healthSummary.level==='ok'?'#22c55e':healthSummary.level==='warn'?'#f59e0b':'#ef4444'),
+                              background: healthSummary.level==='ok'?'#f0fdf4':healthSummary.level==='warn'?'#fffbeb':'#fef2f2'}">
+                    <div :style="{fontSize:'14px',fontWeight:'500',color:healthSummary.level==='ok'?'#16a34a':healthSummary.level==='warn'?'#92400e':'#dc2626'}">
+                        {{healthSummary.text}}
+                    </div>
+                </div>
+                <div class="card" v-if="alerts.length">
+                    <h3>⚠ 活跃告警 <span class="badge badge-down" style="margin-left:6px">{{alerts.length}}</span></h3>
+                    <table>
+                        <thead><tr><th>告警名称</th><th>级别</th><th>服务器</th><th>状态</th><th>时间</th><th>操作</th></tr></thead>
+                        <tbody>
+                        <tr v-for="a in alerts.slice(0,5)" :key="a.alertId">
+                            <td><b>{{a.alertName}}</b><div style="font-size:11px;color:#94a3b8">{{a.exporterType||'-'}}</div></td>
+                            <td><span class="badge" :class="severityColor(a.severity)">{{a.severity}}</span></td>
+                            <td>{{a.serverName||'-'}}</td>
+                            <td><span class="badge" :class="{'badge-down':a.state==='FIRING','badge-warn':a.state==='ACKNOWLEDGED','badge-neutral':a.state==='SILENCED'}">{{a.state}}</span></td>
+                            <td style="color:#94a3b8;font-size:12px">{{timeAgo(a.receivedAt)}}</td>
+                            <td><button class="btn btn-primary btn-sm" @click="ackAlert(a.alertId)" v-if="a.state==='FIRING'">确认</button></td>
+                        </tr>
+                        </tbody>
+                    </table>
+                    <div v-if="alerts.length>5" style="padding:10px 14px;font-size:12px;color:#64748b;border-top:1px solid #f1f5f9">
+                        还有 {{alerts.length-5}} 条，<span style="color:#3b82f6;cursor:pointer" @click="navigate('alerts',loadAlerts)">查看全部 →</span>
+                    </div>
+                </div>
+                <div class="card" v-else>
+                    <div class="empty-state" style="padding:28px">
+                        <div class="empty-icon">✅</div>
+                        <div class="empty-title">系统运行正常</div>
+                        <div class="empty-desc">当前无活跃告警</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== Agent 管理 ===== -->
+            <div v-if="page==='agents'" class="page-enter">
+                <div class="page-header">
+                    <div><div class="page-title">Agent 管理</div><div class="page-subtitle">远程采集节点状态监控 · ◆ 本机监控需部署 Agent 客户端程序后才能上线</div></div>
+                    <button class="btn btn-ghost btn-sm" @click="loadAgents()">🔄 刷新</button>
+                </div>
+                <div class="card">
+                    <div v-if="agents.length">
+                        <table>
+                            <thead><tr><th>Agent ID</th><th>IP</th><th>系统</th><th>规格</th><th>版本</th><th>状态</th><th>最后心跳</th><th v-if="currentUserRole !== 'VIEWER'">操作</th></tr></thead>
+                            <tbody>
+                            <tr v-for="a in agents" :key="a.agentId">
+                                <td><b style="font-family:monospace;font-size:12px">{{a.agentId}}</b></td>
+                                <td><code style="background:#f1f5f9;padding:2px 6px;border-radius:4px;font-size:12px">{{a.ip}}</code></td>
+                                <td>{{a.os||'-'}}</td>
+                                <td style="font-size:12px;color:#64748b">{{a.cpuCores||'?'}}核 · {{formatBytes(a.memoryMb)}}</td>
+                                <td><span class="badge badge-neutral">{{a.agentVersion||'unknown'}}</span></td>
+                                <td><span class="badge" :class="a.status==='ONLINE'?'badge-up':'badge-down'"><span class="dot" :class="a.status==='ONLINE'?'dot-g pulse':'dot-r'"></span>{{a.status}}</span><div v-if="a.status!=='ONLINE'" style="font-size:10px;color:#f97316;margin-top:2px">离线 {{timeAgo(a.lastHeartbeat)}}</div></td>
+                                <td style="color:#94a3b8;font-size:12px">{{timeAgo(a.lastHeartbeat)}}</td>
+                                <td v-if="currentUserRole !== 'VIEWER'"><button v-if="a.status!=='ONLINE'" class="btn btn-danger btn-sm" style="font-size:11px" @click="deleteAgent(a.agentId)">✕️ 移除</button></td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div v-else class="empty-state"><div class="empty-icon">⚙</div><div class="empty-title">暂无 Agent</div><div class="empty-desc">前往 <a href="/" style="color:#3b82f6">经典界面</a> 注册 Agent，实现远程主机监控</div></div>
+                </div>
+            </div>
+
+            <!-- ===== Exporter 管理 ===== -->
+            <div v-if="page==='exporters'" class="page-enter">
+                <div class="page-header">
+                    <div><div class="page-title">Exporter 管理</div><div class="page-subtitle">监控服务实例 · ✏️ 编辑名称 · 🏷️ 编辑标签</div></div>
+                    <button class="btn btn-ghost btn-sm" @click="loadExporters()">🔄 刷新</button>
+                    <button class="btn btn-outline btn-sm" @click="showBatchRegister=!showBatchRegister" style="margin-left:8px">⊞ 批量注册</button>
+                    <button class="btn btn-outline btn-sm" @click="batchUnregisterSelected()" v-if="exporters.some(e=>e.checked)" style="margin-left:4px;background:#fef2f2;border-color:#fecaca;color:#dc2626">✕️ 批量注销 ({{exporters.filter(e=>e.checked).length}})</button>
+                </div>
+                <!-- v2.24: 批量注册面板 — 3列卡片网格 -->
+                <div v-if="showBatchRegister" class="card" style="margin-bottom:16px;background:#f8fafc">
+                    <h4 style="margin-bottom:12px">⊞ 批量注册 Exporter</h4>
+                    <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+                        <span style="font-weight:500;font-size:13px">服务器：</span>
+                        <select v-model="batchServerId" style="padding:6px 10px;border-radius:6px;border:1px solid #e2e8f0;flex:1;min-width:150px;font-size:13px">
+                            <option value="local">本机</option>
+                            <option v-for="s in servers" :value="s.id">{{s.name}} ({{s.host}})</option>
+                        </select>
+                        <button class="btn btn-ghost btn-sm" @click="batchSelectAll()" style="white-space:nowrap">{{batchTypes.length===exporterTemplates.length?'全不选':'全选 ('+exporterTemplates.length+')'}}</button>
+                    </div>
+                    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:14px" class="batch-grid">
+                        <label v-for="t in exporterTemplates" :class="['batch-card', batchTypes.includes(t.type)?'batch-card-on':'']"
+                               style="padding:10px;border:1px solid #e2e8f0;border-radius:8px;cursor:pointer;display:flex;flex-direction:column;gap:4px;transition:all .15s"
+                               :style="{background: batchTypes.includes(t.type)?'#fff':'#fafbfc', borderColor: batchTypes.includes(t.type)?'#3b82f6':'#e2e8f0'}">
+                            <div style="display:flex;align-items:center;gap:6px">
+                                <input type="checkbox" :value="t.type" v-model="batchTypes" style="margin:0;accent-color:#3b82f6">
+                                <b style="font-size:12px">{{t.type}}</b>
+                            </div>
+                            <div style="font-size:10px;color:#94a3b8">默认端口: {{t.metricsPort}}</div>
+                            <input :placeholder="'自定义端口(默认'+t.metricsPort+')'" style="width:100%;padding:4px 8px;border:1px solid #e2e8f0;border-radius:4px;font-size:11px;margin-top:2px;box-sizing:border-box" @input="batchCustomPorts[t.type]=$event.target.value">
+                        </label>
+                    </div>
+                    <div style="text-align:center">
+                        <button class="btn btn-primary" @click="batchRegister()" :disabled="batchRegisterLoading" style="padding:10px 32px;font-size:14px;font-weight:600">
+                            {{batchRegisterLoading?'注册中...':'⊞ 批量注册 ('+batchTypes.length+' 项)'}}
+                        </button>
+                    </div>
+                    <div v-if="batchRegisterLoading" style="text-align:center;margin-top:8px;font-size:12px;color:#64748b">请稍候，逐个注册中...</div>
+                    <div v-if="batchResults.length" style="margin-top:10px;font-size:12px;max-height:150px;overflow-y:auto">
+                        <div v-for="r in batchResults" :style="{color:r.status==='ok'?'#16a34a':'#dc2626',padding:'2px 0'}">{{r.status==='ok'?'✅':'❌'}} {{r.type}}: {{r.status==='ok'?r.exporterId:r.error}}</div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div v-if="exporters.length">
+                        <table>
+                            <thead><tr><th style="width:32px"><input type="checkbox" @change="exporters.forEach(e=>e.checked=$event.target.checked)" :checked="exporters.every(e=>e.checked)"></th><th>ID</th><th>类型</th><th>显示名称</th><th>采集地址</th><th>项目</th><th>服务</th><th>状态</th><th></th></tr></thead>
+                            <tbody>
+                            <tr v-for="e in exporters" :key="e.id">
+                                <td><input type="checkbox" v-model="e.checked" style="margin:0"></td>
+                                <td><code style="font-size:11px;color:#64748b">{{e.id}}</code></td>
+                                <td><span class="badge badge-info">{{e.type}}</span></td>
+                                <td>
+                                    <div v-if="editing!==e.id" style="display:flex;align-items:center;gap:6px">
+                                        <span>{{getDisplayName('Exporter',e.id)}}</span>
+                                        <button class="btn btn-ghost btn-sm btn-icon" @click="startEdit(e.id,getDisplayName('Exporter',e.id))">✏️</button>
+                                    </div>
+                                    <div v-else class="edit-inline">
+                                        <input v-model="editValue" @keyup.enter="saveDisplayName('Exporter',e.id)" @keyup.esc="editing=null" style="width:160px">
+                                        <button class="btn btn-success btn-sm" @click="saveDisplayName('Exporter',e.id)">保存</button>
+                                        <button class="btn btn-ghost btn-sm" @click="editing=null">取消</button>
+                                    </div>
+                                </td>
+                                <td><code style="font-size:12px;color:#475569">{{e.scrapeTarget||'-'}}</code></td>
+                                <td><span v-if="e.project" class="badge badge-neutral">{{e.project}}</span><span v-else style="color:#cbd5e1">-</span></td>
+                                <td><span v-if="e.service" class="badge badge-neutral">{{e.service}}</span><span v-else style="color:#cbd5e1">-</span></td>
+                                <td>
+                                    <!-- v2.31: 采集健康状态优先于容器状态 -->
+                                    <span v-if="e.healthStatus==='UP'" class="badge badge-up"><span class="dot dot-g"></span>正常</span>
+                                    <span v-else-if="e.healthStatus==='DOWN'" class="badge badge-warn"><span class="dot dot-r"></span>采集失败</span>
+                                    <span v-else-if="e.healthStatus==='PENDING'" class="badge badge-neutral"><span class="dot dot-y"></span>等待采集</span>
+                                    <span v-else-if="e.state==='running'" class="badge badge-neutral"><span class="dot dot-g"></span>检测中</span>
+                                    <span v-else class="badge badge-down"><span class="dot dot-r"></span>{{e.state||'已停止'}}</span>
+                                    <span v-if="e.agentStatus==='AGENT_OFFLINE' && e.healthStatus!=='UP' && e.healthStatus!=='DOWN'" class="badge badge-warn" style="font-size:10px;margin-left:6px" title="Agent 离线，Exporter 状态不可确认">⚠️ Agent离线</span>
+                                </td>
+                                <td style="display:flex;gap:4px"><button class="btn btn-ghost btn-sm" @click="editLabels(e.id, e.project, e.service)" title="编辑标签">🏷️</button><button class="btn btn-ghost btn-sm" @click="diagnoseExporter(e.id)" title="全链路诊断">⊕</button></td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div v-else class="empty-state"><div class="empty-icon">⊕</div><div class="empty-title">暂无 Exporter</div><div class="empty-desc">前往 <a href="/" style="color:#3b82f6">经典界面</a> 注册</div></div>
+                </div>
+
+                <!-- v2.31: Exporter 诊断结果弹窗 -->
+                <div v-if="exporterDiagResult" class="modal-mask" @click.self="exporterDiagResult=null" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.4);z-index:999;display:flex;align-items:center;justify-content:center">
+                    <div style="background:#fff;border-radius:12px;padding:24px;max-width:600px;width:90%;max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.2)">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+                            <h3 style="margin:0">⊕ Exporter 诊断结果</h3>
+                            <button class="btn btn-ghost btn-sm" @click="exporterDiagResult=null" style="font-size:18px">✕</button>
+                        </div>
+                        <div style="font-size:13px;margin-bottom:12px;padding:8px 12px;border-radius:6px"
+                             :style="{background:exporterDiagResult.allOk?'#f0fdf4':'#fef3c7',color:exporterDiagResult.allOk?'#16a34a':'#92400e'}">
+                            <b>{{exporterDiagResult.exporterId}}</b> — {{exporterDiagResult.summary}}
+                        </div>
+                        <div v-for="c in exporterDiagResult.checks" :key="c.step"
+                             style="padding:8px 12px;margin-bottom:6px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px">
+                            <span v-if="c.status==='ok'" style="color:#22c55e">✅</span>
+                            <span v-else-if="c.status==='skip'" style="color:#94a3b8">⏭</span>
+                            <span v-else style="color:#ef4444">❌</span>
+                            <b style="margin:0 6px">{{c.step}}</b>
+                            <span style="color:#64748b">{{c.detail}}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== 告警中心 ===== -->
+            <div v-if="page==='alerts'" class="page-enter">
+                <div class="page-header">
+                    <div><div class="page-title">告警中心</div><div class="page-subtitle">FIRING → ACKNOWLEDGED → RESOLVED 全生命周期</div></div>
+                    <button class="btn btn-ghost btn-sm" @click="loadAlerts()">🔄 刷新</button>
+                </div>
+                <div class="stat-grid">
+                    <div class="stat-card accent-err"><div class="label">触发中</div><div class="value txt-err">{{alerts.filter(a=>a.state==='FIRING').length}}</div><div class="stat-icon">⚠</div></div>
+                    <div class="stat-card accent-warn"><div class="label">已确认</div><div class="value txt-warn">{{alerts.filter(a=>a.state==='ACKNOWLEDGED').length}}</div><div class="stat-icon">👁</div></div>
+                    <div class="stat-card accent-muted"><div class="label">静默规则</div><div class="value txt-muted-s">{{silences.length}}</div><div class="stat-icon">🔇</div></div>
+                    <div class="stat-card accent-err"><div class="label">严重告警</div><div class="value txt-err">{{alerts.filter(a=>a.severity==='critical').length}}</div><div class="stat-icon">◆</div></div>
+                </div>
+                <div class="card">
+                    <h3>活跃告警</h3>
+                    <div v-if="alerts.length">
+                        <table>
+                            <thead><tr><th>名称</th><th>级别</th><th>服务器</th><th>类型</th><th>状态</th><th>触发时间</th><th>操作</th></tr></thead>
+                            <tbody>
+                            <tr v-for="a in alerts" :key="a.alertId">
+                                <td><b>{{a.alertName}}</b><div v-if="a.summary" style="font-size:11px;color:#94a3b8;margin-top:2px">{{a.summary}}</div></td>
+                                <td><span class="badge" :class="severityColor(a.severity)">{{a.severity}}</span></td>
+                                <td>{{a.serverName||'-'}}</td>
+                                <td><span v-if="a.exporterType" class="badge badge-neutral">{{a.exporterType}}</span></td>
+                                <td><span class="badge" :class="{'badge-down':a.state==='FIRING','badge-warn':a.state==='ACKNOWLEDGED','badge-neutral':a.state==='SILENCED'}">{{a.state}}</span></td>
+                                <td style="color:#94a3b8;font-size:12px">{{timeAgo(a.receivedAt)}}</td>
+                                <td><button class="btn btn-primary btn-sm" @click="ackAlert(a.alertId)" v-if="a.state==='FIRING'">确认</button></td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div v-else class="empty-state"><div class="empty-icon">✅</div><div class="empty-title">无活跃告警</div></div>
+                </div>
+            </div>
+
+            <!-- ===== 服务拓扑 ===== -->
+            <div v-if="page==='topology'" class="page-enter">
+                <div class="page-header">
+                    <div><div class="page-title">服务拓扑</div><div class="page-subtitle">Global → Project → Service → Instance 四层结构</div></div>
+                    <button class="btn btn-ghost btn-sm" @click="loadTopology()">🔄 刷新</button>
+                </div>
+                <div class="stat-grid">
+                    <div class="stat-card accent-info"><div class="label">服务器</div><div class="value">{{topology.totalServers||0}}</div><div class="stat-icon">⊡</div></div>
+                    <div class="stat-card accent-purple"><div class="label">Agent</div><div class="value">{{topology.totalAgents||0}}</div><div class="stat-icon">⚙</div></div>
+                    <div class="stat-card accent-ok"><div class="label">Exporter</div><div class="value">{{topology.totalExporters||0}}</div><div class="stat-icon">⊕</div></div>
+                    <div class="stat-card accent-warn"><div class="label">项目</div><div class="value">{{topology.totalProjects||0}}</div><div class="stat-icon">📁</div></div>
+                </div>
+                <div v-for="p in (topology.projects||[])" :key="p.project" class="card">
+                    <h3>📁 {{p.project}}</h3>
+                    <div v-for="s in p.services" :key="s.service" style="margin:10px 0 4px 8px">
+                        <div style="font-weight:600;color:#475569;margin-bottom:6px;display:flex;align-items:center;gap:6px">🔧 {{s.service}} <span class="badge badge-neutral" style="font-size:10px">{{s.instanceCount}} 实例</span></div>
+                        <div v-for="i in s.instances" :key="i.exporterId" style="margin-left:20px;padding:6px 10px;background:#f8fafc;border-radius:6px;margin-bottom:4px;display:flex;align-items:center;gap:8px;font-size:13px">
+                            <span class="badge badge-info" style="font-size:10px">{{i.type}}</span>
+                            <code style="font-size:11px;color:#64748b;flex:1">{{i.scrapeTarget}}</code>
+                            <span class="badge" :class="i.state==='running'?'badge-up':'badge-down'" style="font-size:10px">{{i.state}}</span>
+                        </div>
+                    </div>
+                </div>
+                <div v-if="!(topology.projects||[]).length" class="card"><div class="empty-state"><div class="empty-icon">⊞</div><div class="empty-title">暂无拓扑数据</div><div class="empty-desc">注册 Exporter 时填写 project 和 service 字段</div></div></div>
+            </div>
+
+            <!-- ===== 通知渠道 ===== -->
+            <div v-if="page==='notify'" class="page-enter">
+                <div class="page-header">
+                    <div><div class="page-title">通知渠道</div><div class="page-subtitle">告警触发/恢复时自动推送到外部渠道</div></div>
+                    <button class="btn btn-ghost btn-sm" @click="loadNotifyChannels()">🔄 刷新</button>
+                </div>
+                <div class="stat-grid">
+                    <div class="stat-card accent-info"><div class="label">渠道总数</div><div class="value txt-info">{{notifyChannels.length}}</div><div class="stat-icon">✉</div></div>
+                    <div class="stat-card accent-ok"><div class="label">已启用</div><div class="value txt-ok">{{notifyChannels.filter(c=>c.enabled).length}}</div><div class="stat-icon">✅</div></div>
+                    <div class="stat-card accent-warn"><div class="label">累计发送</div><div class="value txt-warn">{{notifyChannels.reduce((s,c)=>s+(c.sentCount||0),0)}}</div><div class="stat-icon">📤</div></div>
+                    <div class="stat-card accent-err"><div class="label">失败次数</div><div class="value txt-err">{{notifyChannels.reduce((s,c)=>s+(c.failCount||0),0)}}</div><div class="stat-icon">❌</div></div>
+                </div>
+                <div class="card">
+                    <h3>➕ 新建通知渠道</h3>
+                    <div class="form-grid">
+                        <div><label>渠道名称 *</label><input v-model="newChannel.name" placeholder="如：生产环境告警群"></div>
+                        <div><label>渠道类型 *</label>
+                            <select v-model="newChannel.type">
+                                <option value="">-- 选择类型 --</option>
+                                <option value="DINGTALK">⚠ 钉钉机器人</option>
+                                <option value="FEISHU">🐦 飞书机器人</option>
+                                <option value="WECOM">💼 企业微信机器人</option>
+                                <option value="SLACK">💬 Slack</option>
+                                <option value="WEBHOOK">🌐 通用 Webhook</option>
+                            </select>
+                        </div>
+                        <div class="full"><label>Webhook URL *</label><input v-model="newChannel.webhookUrl" placeholder="https://oapi.dingtalk.com/robot/send?access_token=..."></div>
+                        <div><label>触发策略</label>
+                            <select v-model="newChannel.triggerPolicy">
+                                <option value="ALL">ALL — 所有告警</option>
+                                <option value="CRITICAL">CRITICAL — 仅严重</option>
+                                <option value="CUSTOM">CUSTOM — 自定义过滤</option>
+                            </select>
+                        </div>
+                        <div style="display:flex;gap:20px;align-items:flex-end;padding-bottom:2px">
+                            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:0"><input type="checkbox" v-model="newChannel.notifyOnFiring" style="width:auto"> 触发时通知</label>
+                            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:0"><input type="checkbox" v-model="newChannel.notifyOnResolved" style="width:auto"> 恢复时通知</label>
+                        </div>
+                        <div v-if="newChannel.triggerPolicy==='CUSTOM'"><label>过滤告警名</label><input v-model="newChannel.filterAlertName" placeholder="如 HighCPU（空=不过滤）"></div>
+                        <div v-if="newChannel.triggerPolicy==='CUSTOM'"><label>过滤服务器名</label><input v-model="newChannel.filterServerName" placeholder="如 prod-01（空=不过滤）"></div>
+                    </div>
+                    <div class="form-actions">
+                        <button class="btn btn-primary" @click="createNotifyChannel()">创建渠道</button>
+                        <span v-if="notifyMsg" style="font-size:13px;color:#16a34a">✅ {{notifyMsg}}</span>
+                    </div>
+                </div>
+                <div class="card"><h3>渠道列表</h3>
+                    <div v-if="notifyChannels.length">
+                        <table>
+                            <thead><tr><th>名称</th><th>类型</th><th>策略</th><th>通知时机</th><th>状态</th><th>发送统计</th><th>操作</th></tr></thead>
+                            <tbody>
+                            <tr v-for="c in notifyChannels" :key="c.id">
+                                <td><b>{{c.name}}</b><div style="font-size:10px;color:#cbd5e1;font-family:monospace">{{c.id}}</div></td>
+                                <td><span class="badge badge-info">{{c.type}}</span></td>
+                                <td><span class="badge" :class="c.triggerPolicy==='CRITICAL'?'badge-down':c.triggerPolicy==='CUSTOM'?'badge-warn':'badge-neutral'">{{c.triggerPolicy||'ALL'}}</span></td>
+                                <td style="font-size:12px">
+                                    <span v-if="c.notifyOnFiring" class="badge badge-down" style="margin-right:3px;font-size:10px">FIRING</span>
+                                    <span v-if="c.notifyOnResolved" class="badge badge-up" style="font-size:10px">RESOLVED</span>
+                                </td>
+                                <td><span class="badge" :class="c.enabled?'badge-up':'badge-neutral'">{{c.enabled?'启用':'禁用'}}</span></td>
+                                <td style="font-size:12px"><span style="color:#22c55e">✅ {{c.sentCount||0}}</span> / <span style="color:#ef4444">❌ {{c.failCount||0}}</span></td>
+                                <td><div style="display:flex;gap:4px">
+                                    <button class="btn btn-ghost btn-sm" @click="testNotifyChannel(c.id, c.name)">测试</button>
+                                    <button class="btn btn-sm" :class="c.enabled?'btn-danger':'btn-success'" @click="toggleNotifyChannel(c.id,!c.enabled)">{{c.enabled?'禁用':'启用'}}</button>
+                                    <button class="btn btn-danger btn-sm" @click="deleteNotifyChannel(c.id, c.name)">删除</button>
+                                </div></td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div v-else class="empty-state"><div class="empty-icon">✉</div><div class="empty-title">暂无通知渠道</div><div class="empty-desc">点击上方「创建渠道」添加钉钉/飞书/企微/Webhook 通知</div></div>
+                </div>
+            </div>
+
+            <!-- ===== 配置中心 ===== -->
+            <div v-if="page==='config'" class="page-enter">
+                <div class="page-header">
+                    <div><div class="page-title">配置中心</div><div class="page-subtitle">配置版本管理 · 带 Token 安全查看</div></div>
+                    <button class="btn btn-ghost btn-sm" @click="loadConfigs()">🔄 刷新</button>
+                </div>
+                <div class="card">
+                    <h3>📄 已纳管配置</h3>
+                    <div v-if="Object.keys(configs).length">
+                        <table>
+                            <thead><tr><th>配置名称</th><th>当前版本</th><th>操作</th></tr></thead>
+                            <tbody>
+                            <tr v-for="(ver,name) in configs" :key="name">
+                                <td><b>{{name}}</b></td>
+                                <td><span class="badge badge-info">v{{ver}}</span></td>
+                                <td><button class="btn btn-ghost btn-sm" @click="viewConfig(name)">{{configViewing===name?'⚠ 收起':'查看 ▼'}}</button></td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div v-else class="empty-state"><div class="empty-icon">⚙</div><div class="empty-title">暂无纳管配置</div></div>
+                </div>
+                <div class="card" v-if="configLoading"><div class="empty-state" style="padding:20px"><div style="color:#64748b;font-size:13px">⏳ 加载中...</div></div></div>
+                <div class="card" v-if="configContent">
+                    <h3 style="display:flex;justify-content:space-between;align-items:center">
+                        <span>📝 {{configViewing}}</span>
+                        <div style="display:flex;gap:8px">
+                            <button class="btn btn-ghost btn-sm" @click="copyConfig()">⚖ 复制</button>
+                            <button class="btn btn-ghost btn-sm" @click="configContent='';configViewing=''">✕ 关闭</button>
+                        </div>
+                    </h3>
+                    <pre style="background:#0d1117;color:#e6edf3;padding:18px;border-radius:8px;font-size:12px;font-family:'Cascadia Code','Fira Code','Courier New',monospace;line-height:1.65;overflow:auto;white-space:pre;max-height:500px">{{configContent}}</pre>
+                    <div v-if="configCopied" style="margin-top:8px;font-size:12px;color:#22c55e">✅ 已复制到剪贴板</div>
+                </div>
+            </div>
+
+            <!-- ===== 租户管理 ===== -->
+            <div v-if="page==='tenants'" class="page-enter">
+                <div class="page-header">
+                    <div><div class="page-title">租户管理</div><div class="page-subtitle">多租户隔离：每个租户拥有独立 Agent 和 Exporter 配额</div></div>
+                    <button class="btn btn-ghost btn-sm" @click="loadTenants()">🔄 刷新</button>
+                    <button class="btn btn-outline btn-sm" v-if="currentUserRole==='ADMIN'" @click="showNewTenant=!showNewTenant" style="margin-left:8px">➕ 创建租户</button>
+                </div>
+                <!-- v2.22: 创建租户表单 -->
+                <div v-if="showNewTenant" class="card" style="margin-bottom:16px;background:#f8fafc">
+                    <h4 style="margin-bottom:8px">➕ 创建新租户</h4>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+                        <input v-model="newTenant.tenantId" placeholder="租户 ID（字母/数字）" class="input-std-full">
+                        <input v-model="newTenant.displayName" placeholder="显示名称" class="input-std-full">
+                        <input v-model.number="newTenant.quotaMaxAgents" type="number" placeholder="Agent 配额（默认100）" class="input-std-full">
+                        <input v-model.number="newTenant.quotaMaxExporters" type="number" placeholder="Exporter 配额（默认500）" class="input-std-full">
+                    </div>
+                    <button class="btn btn-primary btn-sm" @click="createTenant()">创建</button>
+                </div>
+                <div class="card">
+                    <table>
+                        <thead><tr><th>租户 ID</th><th>名称</th><th>状态</th><th>Agent</th><th>Exporter</th><th v-if="currentUserRole==='ADMIN'">操作</th></tr></thead>
+                        <tbody>
+                        <tr v-for="t in tenants" :key="t.tenantId">
+                            <td><code style="font-size:12px">{{t.tenantId}}</code></td>
+                            <td><b>{{t.displayName}}</b></td>
+                            <td><span class="badge" :class="t.status==='ACTIVE'?'badge-up':'badge-down'">{{t.status}}</span></td>
+                            <td><input v-if="t._editing && currentUserRole==='ADMIN'" v-model.number="t.quotaMaxAgents" type="number" style="width:60px"><span v-else>{{t.quotaMaxAgents}}</span></td>
+                            <td><input v-if="t._editing && currentUserRole==='ADMIN'" v-model.number="t.quotaMaxExporters" type="number" style="width:60px"><span v-else>{{t.quotaMaxExporters}}</span></td>
+                            <td v-if="currentUserRole==='ADMIN'" style="display:flex;gap:4px">
+                                <button v-if="!t._editing" class="btn btn-ghost btn-sm" @click="t._editing=true">✏️</button>
+                                <button v-if="t._editing" class="btn btn-success btn-sm" @click="saveTenant(t);t._editing=false">保存</button>
+                                <button v-if="t._editing" class="btn btn-ghost btn-sm" @click="t._editing=false;loadTenants()">取消</button>
+                                <button v-if="t.tenantId!=='default'" class="btn btn-danger btn-sm" @click="deleteTenant(t.tenantId)">✕</button>
+                            </td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- ===== 系统审计 ===== -->
+            <div v-if="page==='audit'" class="page-enter">
+                <div class="page-header">
+                    <div><div class="page-title">系统审计</div><div class="page-subtitle">5 维度健康评分 · 实时问题检测</div></div>
+                    <button class="btn btn-ghost btn-sm" @click="loadAudit()">🔄 刷新</button>
+                </div>
+                <div class="stat-grid">
+                    <div class="stat-card" :style="{'--accent-color': audit.grade==='A'?'#22c55e':'#f59e0b'}">
+                        <div class="label">综合评分</div>
+                        <div class="value" :style="{color: audit.grade==='A'?'#22c55e':'#f59e0b'}">{{audit.healthScore||'--'}}<span style="font-size:18px;margin-left:4px">{{audit.grade||''}}</span></div>
+                        <div class="stat-icon">◈</div>
+                    </div>
+                    <div class="stat-card" :style="{'--accent-color': (audit.issues||[]).length>0?'#ef4444':'#22c55e'}">
+                        <div class="label">发现问题</div>
+                        <div class="value" :style="{color: (audit.issues||[]).length>0?'#ef4444':'#22c55e'}">{{(audit.issues||[]).length}}</div>
+                        <div class="stat-icon">⊕</div>
+                    </div>
+                </div>
+                <div class="card" v-if="audit.items">
+                    <h3>⊡ 评分明细</h3>
+                    <table>
+                        <thead><tr><th>组件</th><th>状态</th><th>权重</th><th>得分</th><th>详情</th></tr></thead>
+                        <tbody><tr v-for="item in audit.items" :key="item.component">
+                            <td><b>{{item.component}}</b></td>
+                            <td><span class="badge" :class="item.status==='OK'?'badge-up':'badge-warn'">{{item.status}}</span></td>
+                            <td><span style="color:#64748b;font-size:12px">×{{item.weight}}</span></td>
+                            <td><b>{{item.score}}</b></td>
+                            <td style="font-size:12px;color:#64748b">{{item.detail}}</td>
+                        </tr></tbody>
+                    </table>
+                </div>
+                <div class="card" v-if="audit.issues&&audit.issues.length">
+                    <h3>⚠️ 问题列表</h3>
+                    <div v-for="(issue,i) in audit.issues" :key="i" style="padding:10px 14px;background:#fef2f2;border:1px solid #fecaca;border-radius:7px;margin-bottom:8px;font-size:13px;color:#dc2626">{{issue}}</div>
+                </div>
+                <div v-if="!audit.items" class="card"><div class="empty-state"><div class="empty-icon">⚖</div><div class="empty-title">点击上方 🔄 刷新按钮查看系统审计报告</div></div></div>
+            </div>
+
+            <!-- ===== 用户管理（ADMIN 专属）===== -->
+            <div v-if="page==='users'" class="page-enter">
+                <div class="page-header">
+                    <div>
+                        <div class="page-title">用户管理</div>
+                        <div class="page-subtitle">账户创建 · 权限分配 · 密码管理 · 仅 ADMIN 可操作</div>
+                    </div>
+                    <button class="btn btn-ghost btn-sm" @click="loadUsers()">🔄 刷新</button>
+                </div>
+
+                <!-- 用户列表 -->
+                <div class="card">
+                    <h3 style="margin-bottom:14px">👥 当前用户 <span class="badge badge-neutral" style="margin-left:6px">{{users.length}}</span></h3>
+                    <div v-if="users.length">
+                        <table>
+                            <thead><tr><th>用户名</th><th>显示名称</th><th>角色</th><th>ID</th><th>操作</th></tr></thead>
+                            <tbody>
+                            <tr v-for="u in users" :key="u.id">
+                                <td><b>{{u.username}}</b></td>
+                                <td style="color:#64748b">{{u.displayName||'-'}}</td>
+                                <td>
+                                    <span class="badge" :class="u.role==='ADMIN'?'badge-down':u.role==='OPS'?'badge-info':'badge-neutral'">
+                                        {{u.role==='ADMIN'?'🔴 ADMIN':u.role==='OPS'?'🔵 OPS':'⚪ VIEWER'}}
+                                    </span>
+                                </td>
+                                <td><code style="font-size:11px;color:#94a3b8">{{u.id}}</code></td>
+                                <td>
+                                    <button class="btn btn-danger btn-sm"
+                                            v-if="u.username!==currentUser && currentUserRole === 'ADMIN'"
+                                            @click="deleteUser(u.id, u.username)">✕ 删除</button>
+                                    <span v-else style="font-size:12px;color:#94a3b8">当前账户</span>
+                                </td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div v-else class="empty-state"><div class="empty-icon">⊙</div><div class="empty-title">暂无用户数据</div></div>
+                </div>
+
+                <!-- 创建用户（仅ADMIN可见） -->
+                <div class="card" v-if="currentUserRole === 'ADMIN'">
+                    <h3 style="margin-bottom:16px">➕ 创建新用户</h3>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+                        <div>
+                            <label class="form-label-sm">用户名 * <span class="fw-400 txt-muted">（3-32位字母/数字/下划线）</span></label>
+                            <input v-model="newUser.username" placeholder="如：ops_user01"
+                                   class="input-std-full"
+                                   @keyup.enter="createUser">
+                        </div>
+                        <div>
+                            <label class="form-label-sm">密码 * <span class="fw-400 txt-muted">（至少6位）</span></label>
+                            <input v-model="newUser.password" type="password" placeholder="至少6位"
+                                   class="input-std-full"
+                                   @keyup.enter="createUser">
+                        </div>
+                        <div>
+                            <label class="form-label-sm">角色 *</label>
+                            <select v-model="newUser.role"
+                                    style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:inherit;background:#fff;outline:none">
+                                <option value="VIEWER">⚪ VIEWER — 只读（查看监控数据）</option>
+                                <option value="OPS">🔵 OPS — 运维（管理Exporter/告警）</option>
+                                <option value="ADMIN">🔴 ADMIN — 管理员（全部权限）</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="form-label-sm">显示名称 <span class="fw-400 txt-muted">（可选）</span></label>
+                            <input v-model="newUser.displayName" placeholder="如：运维工程师张三"
+                                   class="input-std-full">
+                        </div>
+                    </div>
+                    <div v-if="newUserError" style="padding:10px 14px;background:#fef2f2;border:1px solid #fecaca;border-radius:7px;color:#dc2626;font-size:13px;margin-bottom:12px">⚠️ {{newUserError}}</div>
+                    <button class="btn btn-primary" @click="createUser" :disabled="newUserLoading">
+                        {{newUserLoading ? '创建中...' : '➕ 创建用户'}}
+                    </button>
+                    <div style="margin-top:12px;padding:10px 14px;background:#f8fafc;border-radius:7px;font-size:12px;color:#64748b;line-height:1.8">
+                        <b>角色权限说明：</b><br>
+                        🔴 <b>ADMIN</b>：创建/删除用户、全部管理权限<br>
+                        🔵 <b>OPS</b>：管理 Exporter、服务器、告警、CMDB，不能管理用户<br>
+                        ⚪ <b>VIEWER</b>：只读查看，不能执行任何写操作
+                    </div>
+                </div>
+
+                <!-- 修改自己的密码 -->
+                <div class="card">
+                    <h3 style="margin-bottom:16px">🔑 修改我的密码</h3>
+                    <div style="max-width:400px">
+                        <div style="margin-bottom:10px">
+                            <label class="form-label-sm">当前密码</label>
+                            <input v-model="changePwdForm.oldPassword" type="password" placeholder="当前密码"
+                                   class="input-std-full">
+                        </div>
+                        <div style="margin-bottom:10px">
+                            <label class="form-label-sm">新密码 <span class="fw-400 txt-muted">（至少6位）</span></label>
+                            <input v-model="changePwdForm.newPassword" type="password" placeholder="新密码"
+                                   class="input-std-full">
+                        </div>
+                        <div style="margin-bottom:12px">
+                            <label class="form-label-sm">确认新密码</label>
+                            <input v-model="changePwdForm.confirm" type="password" placeholder="再次输入新密码"
+                                   class="input-std-full"
+                                   @keyup.enter="changePassword">
+                        </div>
+                        <div v-if="changePwdError" style="padding:10px 14px;background:#fef2f2;border:1px solid #fecaca;border-radius:7px;color:#dc2626;font-size:13px;margin-bottom:10px">⚠️ {{changePwdError}}</div>
+                        <div v-if="changePwdMsg"   style="padding:10px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:7px;color:#16a34a;font-size:13px;margin-bottom:10px">✅ {{changePwdMsg}}</div>
+                        <button class="btn btn-primary" @click="changePassword">🔑 修改密码</button>
+                        <div style="margin-top:8px;font-size:12px;color:#94a3b8">修改成功后将自动退出登录，需重新登录</div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- ===== Sentinel 自动化运维 ===== -->
+            <div v-if="page==='sentinel'" class="page-enter">
+                <div class="page-header">
+                    <div>
+                        <div class="page-title">◈️ Sentinel 自动化运维</div>
+                        <div class="page-subtitle">故障诊断 · Runbook 执行 · Incident 管理</div>
+                    </div>
+                    <div style="display:flex;gap:8px;align-items:center">
+                        <button class="btn btn-ghost btn-sm" @click="loadSentinel()">🔄 刷新</button>
+                        <button class="btn btn-primary btn-sm" v-if="currentUserRole !== 'VIEWER'" @click="showDiagnosePanel=!showDiagnosePanel">⊕ 触发诊断</button>
+                    </div>
+                </div>
+
+                <!-- 诊断面板 -->
+                <div class="card" v-if="showDiagnosePanel">
+                    <h3>⊕ 手动触发诊断</h3>
+                    <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+                        <div>
+                            <label class="form-label-sm">目标服务器</label>
+                            <select v-model="diagnoseServerId" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;min-width:200px">
+                                <option value="">-- 选择服务器 --</option>
+                                <option value="local">本机 (local)</option>
+                                <option v-for="s in sentinelServers" :key="s.id" :value="s.id">{{s.name}} ({{s.host}})</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-primary" @click="triggerDiagnose()" :disabled="diagnosing||!diagnoseServerId">
+                            {{diagnosing ? '诊断中...' : '▶ 开始诊断'}}
+                        </button>
+                    </div>
+                    <div v-if="diagnoseResult" style="margin-top:12px;padding:12px;background:#f8fafc;border-radius:8px;font-size:13px">
+                        <div v-if="diagnoseResult.length===0" style="padding:12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px">
+                            <div style="color:#16a34a;font-weight:600;margin-bottom:8px">✅ 系统健康 — 已检查 13 项指标，均在正常范围内</div>
+                            <div style="font-size:12px;color:#64748b;margin-bottom:6px">系统已检查：CPU使用率、内存使用率、磁盘使用率、iowait、负载、磁盘IO、网络流量(入/出)、Swap、文件描述符、Exporter在线率</div>
+                            <div style="font-size:12px;color:#3b82f6">◆ 提示：可在<a href="#" @click.prevent="navigate('alerts',loadAlerts)" style="color:#3b82f6;text-decoration:underline">告警中心</a>配置阈值告警，系统会在指标超限时自动创建 Incident</div>
+                        </div>
+                        <!-- v2.28: 诊断结果搜索 -->
+                        <div v-if="diagnoseResult.length > 0" style="margin-bottom:8px;position:relative">
+                            <input v-model.trim="diagnosisFilter" placeholder="⊕ 搜索诊断结果（名称/级别/根因）..." style="width:100%;padding:6px 30px 6px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;box-sizing:border-box">
+                            <span v-if="diagnosisFilter" @click="diagnosisFilter=''" style="position:absolute;right:8px;top:5px;cursor:pointer;color:#94a3b8;font-size:12px">✕</span>
+                        </div>
+                        <div v-for="r in diagnoseResult.filter(diagFilterFunc)" :key="r.faultId" style="margin-bottom:8px;padding:10px;border:1px solid #e2e8f0;border-radius:6px">
+                            <div style="display:flex;justify-content:space-between;align-items:center">
+                                <span style="font-weight:600">{{r.faultName}}</span>
+                                <div style="display:flex;gap:6px">
+                                    <span :style="{background: r.severity==='P0'?'#ef4444':r.severity==='P1'?'#f97316':'#f59e0b', color:'#fff', padding:'2px 8px', borderRadius:'10px', fontSize:'11px'}">{{r.severity}}</span>
+                                    <span style="background:#3b82f6;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px">置信度 {{r.confidence.toFixed(0)}}%</span>
+                                </div>
+                            </div>
+                            <div style="font-size:12px;color:#64748b;margin-top:4px">{{r.rootCause}}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 统计卡片（v2.28: 可点击过滤） -->
+                <div class="stats-grid" style="grid-template-columns:repeat(4,1fr)">
+                    <div class="stat-card accent-err" @click="incFilter=incFilter==='P0'?'':'P0'" :style="{cursor:'pointer',border:incFilter==='P0'?'2px solid #ef4444':'',transform:incFilter==='P0'?'scale(1.03)':''}" title="点击过滤 P0 紧急 Incident"><div class="label">P0 紧急</div><div class="value txt-err">{{incidents.filter(i=>i.severity==='P0'&&i.status!=='CLOSED'&&i.status!=='RESOLVED').length}}</div><div class="stat-icon">◆</div></div>
+                    <div class="stat-card accent-orange" @click="incFilter=incFilter==='P1'?'':'P1'" :style="{cursor:'pointer',border:incFilter==='P1'?'2px solid #f97316':'',transform:incFilter==='P1'?'scale(1.03)':''}" title="点击过滤 P1 重要 Incident"><div class="label">P1 重要</div><div class="value txt-orange">{{incidents.filter(i=>i.severity==='P1'&&i.status!=='CLOSED'&&i.status!=='RESOLVED').length}}</div><div class="stat-icon">⚠️</div></div>
+                    <div class="stat-card accent-warn" @click="incFilter=incFilter==='INVESTIGATING'?'':'INVESTIGATING'" :style="{cursor:'pointer',border:incFilter==='INVESTIGATING'?'2px solid #f59e0b':'',transform:incFilter==='INVESTIGATING'?'scale(1.03)':''}" title="点击过滤处理中 Incident"><div class="label">处理中</div><div class="value txt-warn">{{incidents.filter(i=>i.status==='INVESTIGATING').length}}</div><div class="stat-icon">🔧</div></div>
+                    <div class="stat-card accent-ok" @click="incFilter=incFilter==='RESOLVED'?'':'RESOLVED'" :style="{cursor:'pointer',border:incFilter==='RESOLVED'?'2px solid #22c55e':'',transform:incFilter==='RESOLVED'?'scale(1.03)':''}" title="点击过滤今日已解决"><div class="label">今日已解决</div><div class="value txt-ok">{{incidents.filter(i=>i.status==='RESOLVED'&&isToday(i.endTime)).length}}</div><div class="stat-icon">✅</div></div>
+                </div>
+                <!-- v2.28: 筛选提示条 -->
+                <div v-if="incFilter" style="padding:6px 12px;font-size:12px;color:#64748b;display:flex;align-items:center;gap:8px;margin-bottom:8px;background:#f8fafc;border-radius:6px">
+                    ⊕ 已筛选：<b>{{incFilter==='P0'?'P0 紧急':incFilter==='P1'?'P1 重要':incFilter==='INVESTIGATING'?'处理中':'今日已解决'}}</b>
+                    <button class="btn btn-ghost btn-sm" @click="incFilter=''" style="font-size:11px">✕ 清除</button>
+                </div>
+
+                <!-- Incident 列表 -->
+                <div class="card">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+                        <h3 style="margin:0">⚖ Incident 列表</h3>
+                        <div style="display:flex;gap:6px">
+                            <button class="btn btn-ghost btn-sm" :class="{'btn-primary':incidentFilter==='open'}" @click="incidentFilter='open'">进行中</button>
+                            <button class="btn btn-ghost btn-sm" :class="{'btn-primary':incidentFilter==='all'}"  @click="incidentFilter='all'">全部</button>
+                        </div>
+                    </div>
+                    <div v-if="filteredIncidents.length">
+                        <table>
+                            <thead><tr><th>ID</th><th>服务器</th><th>故障</th><th>级别</th><th>状态</th><th>置信度</th><th>开始时间</th><th>操作</th></tr></thead>
+                            <tbody>
+                            <tr v-for="inc in filteredIncidents" :key="inc.id">
+                                <td><code style="font-size:11px;color:#64748b">{{inc.id}}</code></td>
+                                <td style="font-size:12px">{{inc.serverName||inc.serverId}}</td>
+                                <td><b style="font-size:13px">{{inc.faultName}}</b><div style="font-size:11px;color:#64748b;margin-top:2px">{{inc.rootCause}}</div></td>
+                                <td>
+                                    <span :style="{background: inc.severity==='P0'?'#fef2f2':inc.severity==='P1'?'#fff7ed':'#fffbeb', color: inc.severity==='P0'?'#dc2626':inc.severity==='P1'?'#ea580c':'#d97706', padding:'3px 8px', borderRadius:'10px', fontSize:'11px', fontWeight:'700'}">{{inc.severity}}</span>
+                                </td>
+                                <td>
+                                    <span class="badge" :class="inc.status==='OPEN'?'badge-down':inc.status==='INVESTIGATING'?'badge-warn':inc.status==='RESOLVED'?'badge-up':'badge-neutral'">
+                                        {{inc.status==='OPEN'?'OPEN':inc.status==='INVESTIGATING'?'调查中':inc.status==='RESOLVED'?'已解决':'已关闭'}}
+                                    </span>
+                                </td>
+                                <td>
+                                    <div style="display:flex;align-items:center;gap:6px">
+                                        <div style="height:4px;border-radius:2px;background:#e2e8f0;flex:1;min-width:50px">
+                                            <div :style="{width:inc.confidence+'%',height:'100%',borderRadius:'2px', background: inc.confidence>=80?'#22c55e':inc.confidence>=60?'#f59e0b':'#ef4444'}"></div>
+                                        </div>
+                                        <span style="font-size:12px;font-weight:600">{{inc.confidence.toFixed(0)}}%</span>
+                                    </div>
+                                </td>
+                                <td style="font-size:12px;color:#64748b">{{timeAgo(inc.startTime)}}<br v-if="inc.lastSeenTime && inc.lastSeenTime > inc.startTime"><span v-if="inc.lastSeenTime && inc.lastSeenTime > inc.startTime" style="font-size:10px;color:#b45309">🔄 {{timeAgo(inc.lastSeenTime)}}</span></td>
+                                <td>
+                                    <div style="display:flex;gap:4px;flex-wrap:wrap">
+                                        <button v-if="inc.status==='OPEN' && currentUserRole !== 'VIEWER'" class="btn btn-ghost btn-sm" style="font-size:11px" @click="investigateIncident(inc.id)">调查</button>
+                                        <button v-if="inc.status!=='RESOLVED'&&inc.status!=='CLOSED' && currentUserRole !== 'VIEWER'" class="btn btn-primary btn-sm" style="font-size:11px" @click="executeRunbook(inc)">▶ 执行</button>
+                                        <button v-if="inc.status==='INVESTIGATING' && currentUserRole !== 'VIEWER'" class="btn btn-success btn-sm" style="font-size:11px" @click="resolveIncident(inc.id)">✓ 解决</button>
+                                        <button class="btn btn-ghost btn-sm" style="font-size:11px" @click="viewIncidentDetail(inc)">详情</button>
+                                    </div>
+                                </td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div v-else class="empty-state">
+                        <div class="empty-icon">◈️</div>
+                        <div class="empty-title">{{incidentFilter==='open'?'暂无进行中的故障事件':'暂无故障事件记录'}}</div>
+                        <div class="empty-desc">告警触发时系统将自动诊断并创建 Incident</div>
+                    </div>
+                </div>
+
+                <!-- Incident 详情面板 -->
+                <div class="card" v-if="selectedIncident">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+                        <h3 style="margin:0">🔎 Incident 详情：{{selectedIncident.id}}</h3>
+                        <button class="btn btn-ghost btn-sm" @click="selectedIncident=null">✕ 关闭</button>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+                        <div><label style="font-size:11px;color:#64748b;font-weight:600">故障类型</label><div style="font-size:14px;font-weight:600;margin-top:3px">{{selectedIncident.faultName}}</div></div>
+                        <div><label style="font-size:11px;color:#64748b;font-weight:600">服务器</label><div style="font-size:14px;margin-top:3px">{{selectedIncident.serverName}} ({{selectedIncident.serverId}})</div></div>
+                        <div><label style="font-size:11px;color:#64748b;font-weight:600">根因推断</label><div style="font-size:13px;margin-top:3px;color:#475569">{{selectedIncident.rootCause}}</div></div>
+                        <div><label style="font-size:11px;color:#64748b;font-weight:600">影响评分</label><div style="font-size:14px;font-weight:600;margin-top:3px;color:#f97316">{{selectedIncident.impactScore.toFixed(1)}}</div></div>
+                    </div>
+                    <!-- v2.12: 最后触发时间 -->
+                    <div v-if="selectedIncident.lastSeenTime" style="margin-bottom:12px;padding:6px 10px;background:#fffbeb;border-radius:6px;font-size:12px;color:#92400e">
+                        🔄 最后触发：{{formatExecTime(selectedIncident.lastSeenTime)}}
+                        <span v-if="selectedIncident.startTime && selectedIncident.lastSeenTime > selectedIncident.startTime" style="margin-left:8px;color:#b45309">
+                            (已重复触发)
+                        </span>
+                    </div>
+                    <!-- v2.12: 指标快照 -->
+                    <div v-if="selectedIncident.indicatorSnapshot && Object.keys(selectedIncident.indicatorSnapshot).length" style="margin-bottom:14px">
+                        <label style="font-size:11px;color:#64748b;font-weight:600;display:block;margin-bottom:6px">⊡ 诊断指标快照</label>
+                        <div style="display:flex;flex-wrap:wrap;gap:6px">
+                            <span v-for="(val,key) in selectedIncident.indicatorSnapshot" :key="key"
+                                  style="padding:3px 8px;background:#f1f5f9;border-radius:4px;font-size:11px;font-family:monospace;color:#334155">
+                                {{key}}: {{typeof val==='number'?val.toFixed(2):val}}
+                            </span>
+                        </div>
+                    </div>
+                    <!-- Runbook 步骤 -->
+                    <div v-if="selectedIncident.runbookSteps&&selectedIncident.runbookSteps.length">
+                        <label style="font-size:11px;color:#64748b;font-weight:600;display:block;margin-bottom:8px">⚖ RUNBOOK 步骤</label>
+                        <div v-for="(step,i) in selectedIncident.runbookSteps" :key="i"
+                             style="padding:8px 12px;border-left:3px solid #3b82f6;background:#f8fafc;margin-bottom:6px;border-radius:0 6px 6px 0">
+                            <div style="display:flex;justify-content:space-between">
+                                <span style="font-size:12px;font-weight:600">{{step.name}}</span>
+                                <span style="font-size:10px;background:#e2e8f0;padding:1px 6px;border-radius:8px;color:#64748b">{{step.type}}</span>
+                            </div>
+                            <div style="font-size:11px;color:#64748b;margin-top:2px;font-family:monospace">{{step.command}}</div>
+                        </div>
+                    </div>
+                    <!-- 执行历史 -->
+                    <div v-if="selectedIncident.executionHistory&&selectedIncident.executionHistory.length" style="margin-top:14px">
+                        <label style="font-size:11px;color:#64748b;font-weight:600;display:block;margin-bottom:8px">⚡ 执行历史</label>
+                        <div v-for="(r,i) in selectedIncident.executionHistory" :key="i"
+                             :style="{padding:'8px 12px', borderLeft:'3px solid '+(r.success?'#22c55e':'#ef4444'), background:r.success?'#f0fdf4':'#fef2f2', marginBottom:'4px', borderRadius:'0 6px 6px 0'}">
+                            <div style="display:flex;justify-content:space-between">
+                                <span style="font-size:12px;font-weight:600">{{r.stepName}}</span>
+                                <div style="display:flex;gap:6px;align-items:center">
+                                    <span style="font-size:10px;color:#94a3b8">{{r.durationMs}}ms</span>
+                                    <span :style="{fontSize:'11px', color: r.success?'#16a34a':'#dc2626'}">{{r.success?'✅ 成功':'❌ 失败'}}</span>
+                                </div>
+                            </div>
+                            <div style="font-size:11px;color:#64748b;margin-top:2px">{{r.message}}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 故障指纹库 -->
+                <div class="card">
+                    <h3 style="cursor:pointer" @click="showFingerprints=!showFingerprints">
+                        🔬 故障指纹库 <span style="font-size:13px;color:#94a3b8">({{fingerprints.length}} 种) {{showFingerprints?'⚠':'▼'}}</span>
+                    </h3>
+                    <div v-if="showFingerprints">
+                        <!-- v2.28: 指纹搜索 + 级别快筛 -->
+                        <div style="margin-bottom:10px">
+                            <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
+                                <input v-model.trim="fingerprintSearch" placeholder="⊕ 名称/ID/描述/级别..." style="flex:1;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;box-sizing:border-box">
+                                <button class="btn btn-ghost btn-sm" @click="fingerprintSearch=''; fpFilterLevel=''" style="white-space:nowrap" v-if="fingerprintSearch||fpFilterLevel">✕ 清除</button>
+                                <span v-if="fingerprintSearch||fpFilterLevel" style="font-size:11px;color:#64748b;white-space:nowrap">{{fingerprints.filter(fpFilterFunc).length}}/{{fingerprints.length}}</span>
+                            </div>
+                            <div style="display:flex;gap:4px;flex-wrap:wrap">
+                                <button class="btn btn-ghost btn-sm" :style="{background:!fpFilterLevel?'#3b82f6':'#f1f5f9',color:!fpFilterLevel?'#fff':'#64748b',fontSize:'11px',padding:'2px 8px'}" @click="fpFilterLevel=''">全部</button>
+                                <button class="btn btn-ghost btn-sm" v-for="l in ['P0','P1','P2']" :key="l" :style="{background:fpFilterLevel===l?(l==='P0'?'#ef4444':l==='P1'?'#f97316':'#f59e0b'):'#f1f5f9',color:fpFilterLevel===l?'#fff':'#64748b',fontSize:'11px',padding:'2px 8px'}" @click="fpFilterLevel=fpFilterLevel===l?'':l">{{l}}</button>
+                            </div>
+                        </div>
+                        <div v-for="fp in fingerprints.filter(fpFilterFunc)" :key="fp.id"
+                             style="padding:10px 14px;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:8px">
+                            <div style="display:flex;justify-content:space-between;align-items:center">
+                                <div>
+                                    <span style="font-weight:600;font-size:13px">{{fp.name}}</span>
+                                    <code style="font-size:10px;background:#f1f5f9;padding:1px 6px;border-radius:4px;color:#64748b;margin-left:8px">{{fp.id}}</code>
+                                </div>
+                                <span :style="{background: fp.severity==='P0'?'#ef4444':fp.severity==='P1'?'#f97316':'#f59e0b', color:'#fff', padding:'2px 8px', borderRadius:'10px', fontSize:'11px'}">{{fp.severity}}</span>
+                            </div>
+                            <div style="font-size:12px;color:#64748b;margin-top:4px">{{fp.description}}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Runbook 测试 -->
+                <div class="card">
+                    <h3 style="cursor:pointer" @click="showRunbookTest=!showRunbookTest">
+                        🧪 Runbook 测试执行 <span style="font-size:12px;color:#94a3b8">{{showRunbookTest?'⚠':'▼'}}</span>
+                    </h3>
+                    <div v-if="showRunbookTest">
+                        <div style="margin-bottom:10px">
+                            <label class="form-label-sm">步骤名称</label>
+                            <input v-model="testStep.name" placeholder="如：Prometheus 健康检查" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 2fr;gap:10px;margin-bottom:10px">
+                            <div>
+                                <label class="form-label-sm">类型</label>
+                                <select v-model="testStep.type" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+                                    <option value="HTTP">HTTP</option>
+                                    <option value="SCRIPT">SCRIPT</option>
+                                    <option value="LOG">LOG</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="form-label-sm">命令/URL</label>
+                                <input v-model="testStep.command" placeholder="如：http://localhost:9090/-/healthy" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+                            </div>
+                        </div>
+                        <button class="btn btn-primary" @click="testRunbookStep()" :disabled="runbookTesting">
+                            {{runbookTesting ? '执行中...' : '▶ 执行步骤'}}
+                        </button>
+                        <div v-if="runbookTestResult" style="margin-top:12px">
+                            <div v-for="r in runbookTestResult.stepResults" :key="r.stepName"
+                                 :style="{padding:'10px 14px', border:'1px solid '+(r.success?'#bbf7d0':'#fecaca'), background:r.success?'#f0fdf4':'#fef2f2', borderRadius:'8px', marginBottom:'6px'}">
+                                <div style="display:flex;justify-content:space-between">
+                                    <b>{{r.stepName}}</b>
+                                    <div style="display:flex;gap:8px;font-size:12px">
+                                        <span style="color:#94a3b8">{{r.durationMs}}ms</span>
+                                        <span :style="{color:r.success?'#16a34a':'#dc2626', fontWeight:'600'}">{{r.success?'✅ 成功':'❌ 失败'}}</span>
+                                    </div>
+                                </div>
+                                <div style="font-size:12px;color:#475569;margin-top:4px;font-family:monospace;white-space:pre-wrap">{{r.message}}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div><!-- /main -->
+    </div><!-- /app (v-if loggedIn) -->
+
+</template>
+
+</body>
+</html>

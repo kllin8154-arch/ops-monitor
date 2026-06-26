@@ -1,0 +1,522 @@
+/*
+ * classic-patch.css — v2.9 视觉整改增量样式表
+ *
+ * 目的:
+ *   - 替代 index.html 中散落的 inline style
+ *   - 1366×768 适配,避免按钮换行
+ *   - 中英混排字体统一
+ *   - 不修改 classic.css(避免影响其他页面),通过追加加载实现增量覆盖
+ *
+ * 引入方式:在 index.html <head> 中追加
+ *   <link rel="stylesheet" href="/classic-patch.css">
+ */
+
+/* ========== Header 整改 ========== */
+.header-title h1 {
+    margin: 0;
+    line-height: 1.3;
+}
+.header-sub {
+    margin: 4px 0 0;
+    font-size: 12px;
+    color: #94a3b8;
+}
+.header-link-admin {
+    background: rgba(59, 130, 246, .2);
+    color: #93c5fd;
+    border: 1px solid rgba(59, 130, 246, .3);
+    border-radius: 6px;
+    padding: 5px 12px;
+}
+.header-user {
+    color: #94a3b8;
+    font-size: 12px;
+    margin-left: 4px;
+    display: none;
+}
+.header-logout {
+    display: none;
+    color: #f87171;
+    padding: 5px 10px;
+    border-radius: 6px;
+}
+
+/* ========== 通用辅助类 ========== */
+.muted-tip {
+    color: var(--muted);
+    font-size: 13px;
+}
+.muted-time {
+    font-size: 12px;
+    color: var(--muted);
+}
+
+/* ========== 状态网格 3 列模式 ========== */
+.status-grid-3 {
+    grid-template-columns: repeat(3, 1fr);
+}
+
+/* ========== 进度条增强 ========== */
+.prog-bar-sp {
+    margin-top: 6px;
+}
+.prog-fill-success {
+    width: 0%;
+    background: var(--success);
+    transition: width .4s ease, background .3s ease;
+}
+
+/* ========== 添加表单卡片 ========== */
+.add-form {
+    display: none;
+    background: #fafafa;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 16px;
+    border: 1px solid #f0f0f0;
+}
+.add-form-row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: flex-end;
+}
+.add-form-field label {
+    font-size: 12px;
+    color: var(--muted);
+    display: block;
+    margin-bottom: 4px;
+}
+.add-form-field input {
+    width: 180px;
+    padding: 6px 10px;
+    border: 1px solid #d9d9d9;
+    border-radius: 6px;
+    font-size: 13px;
+    transition: border .2s;
+}
+.add-form-field input:focus {
+    border-color: var(--brand, #3b82f6);
+    outline: none;
+}
+.add-form-field-wide input {
+    width: 230px;
+}
+
+/* ========== 卡片网格(服务器列表) ========== */
+.card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+}
+
+/* ========== 服务/Job 标签流式布局 ========== */
+.service-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+/* ========== 1366×768 适配:防按钮挤出 ========== */
+@media (max-width: 1400px) {
+    .header {
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+    .header-links {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+    .add-form-field input {
+        width: 160px;
+    }
+    .add-form-field-wide input {
+        width: 200px;
+    }
+    .card-grid {
+        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    }
+}
+
+/* ========== 1280 以下:单列卡片栈 ========== */
+@media (max-width: 1280px) {
+    .status-grid-3 {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+/* ========== 中英混排字体统一(等宽数字提升可读性) ========== */
+.s-card .val {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.3px;
+}
+
+/* ========== 显示状态切换辅助类(JS toggle 时使用) ========== */
+.add-form.show { display: block; }
+.header-user.show { display: inline; }
+.header-logout.show { display: inline; }
+
+/* ======================================================================
+ * v2.9 P1: admin.html 视觉整改工具类
+ * 基于 admin.html 高频 inline style 模式抽象而来(>=3 次出现)
+ * 使用方式:将 style="color:#22c55e" 改为 class="txt-ok"
+ * 与 Vue 动态 :style="..." 兼容(本工具类提供静态值)
+ * ====================================================================== */
+
+/* ---------- 语义化颜色(状态色) ---------- */
+.txt-ok       { color: #22c55e; }   /* 成功/在线/UP */
+.txt-warn     { color: #f59e0b; }   /* 警告/PENDING */
+.txt-err      { color: #ef4444; }   /* 错误/离线/DOWN */
+.txt-info     { color: #3b82f6; }   /* 信息/主色 */
+.txt-muted    { color: #94a3b8; }   /* 弱化 */
+.txt-muted-s  { color: #64748b; }   /* 弱化-深 */
+
+/* ---------- accent-color 变量(用于 stat-card 左侧高亮条) ---------- */
+.accent-ok    { --accent-color: #22c55e; }
+.accent-warn  { --accent-color: #f59e0b; }
+.accent-err   { --accent-color: #ef4444; }
+.accent-info  { --accent-color: #3b82f6; }
+
+/* ---------- 字号工具类 ---------- */
+.fs-10        { font-size: 10px; }
+.fs-11        { font-size: 11px; }
+.fs-12        { font-size: 12px; }
+.fs-13        { font-size: 13px; }
+
+/* ---------- 常用 Label(表单字段说明小字) ---------- */
+.form-label-sm {
+    color: #64748b;
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 5px;
+}
+
+/* 小写标题(tag 风格) */
+.kpi-label {
+    color: #94a3b8;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: .5px;
+    text-transform: uppercase;
+}
+
+/* 副文本标签(深灰小字) */
+.sub-muted {
+    color: #94a3b8;
+    font-size: 12px;
+}
+
+/* 副文本标签(浅色小字) */
+.sub-muted-s {
+    color: #64748b;
+    font-size: 12px;
+}
+
+/* ---------- flex 工具类 ---------- */
+.flex-between {
+    align-items: center;
+    display: flex;
+    justify-content: space-between;
+}
+.flex-center {
+    align-items: center;
+    display: flex;
+    justify-content: center;
+}
+
+/* ---------- 间距工具 ---------- */
+.mb-10 { margin-bottom: 10px; }
+.mb-8  { margin-bottom: 8px; }
+.mb-4  { margin-bottom: 4px; }
+
+/* ---------- 输入框统一风格(高频出现) ---------- */
+.input-std {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 13px;
+    outline: none;
+    padding: 9px 12px;
+    transition: border .2s;
+}
+.input-std:focus {
+    border-color: #3b82f6;
+}
+
+/* ---------- Nav badge 徽章色 ---------- */
+.badge-warn {
+    background: #f59e0b;
+    color: #fff;
+    padding: 1px 6px;
+    border-radius: 8px;
+    font-size: 10px;
+    font-weight: 600;
+}
+
+/* ---------- admin 错误兜底页(JS fallback 场景保留 inline style) ---------- */
+.admin-fatal {
+    align-items: center;
+    background: #f1f5f9;
+    color: #64748b;
+    display: flex;
+    font-family: sans-serif;
+    height: 100vh;
+    justify-content: center;
+}
+.admin-fatal .icon {
+    font-size: 40px;
+    margin-bottom: 12px;
+}
+.admin-fatal .title {
+    color: #1e293b;
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+.admin-fatal .hint {
+    font-size: 13px;
+}
+
+/* ---------- 大屏主机/服务状态色块(蜂窝单元) ---------- */
+.cell-up    { background: #22c55e; color: #fff; }
+.cell-down  { background: #ef4444; color: #fff; }
+.cell-pending { background: #f59e0b; color: #fff; }
+.cell-unknown { background: #94a3b8; color: #fff; }
+
+/* ======================================================================
+ * v2.9 P2: admin Sentinel 页补充工具类
+ * ====================================================================== */
+
+/* Orange — 介于 warn(黄)和 err(红)之间,用于 P1 严重告警区分 */
+.txt-orange    { color: #f97316; }
+.accent-orange { --accent-color: #f97316; }
+
+/* P0-P2 语义快捷类(用于 Incident 等级着色) */
+.sev-p0 { color: #ef4444; }   /* P0 紧急 → 红 */
+.sev-p1 { color: #f97316; }   /* P1 重要 → 橙 */
+.sev-p2 { color: #f59e0b; }   /* P2 一般 → 黄 */
+.sev-p3 { color: #22c55e; }   /* P3 低   → 绿 */
+
+/* ======================================================================
+ * v2.14: admin.html inline style 清理补充工具类
+ * ====================================================================== */
+
+/* ---------- 字号补充 ---------- */
+.fs-14        { font-size: 14px; }
+.fs-18        { font-size: 18px; }
+.fs-36        { font-size: 36px; }
+
+/* ---------- 字重补充 ---------- */
+.fw-400       { font-weight: 400; }
+.fw-600       { font-weight: 600; }
+
+/* ---------- 间距补充 ---------- */
+.m-0          { margin: 0; }
+.mb-6         { margin-bottom: 6px; }
+.mb-12        { margin-bottom: 12px; }
+.mb-14        { margin-bottom: 14px; }
+.mb-16        { margin-bottom: 16px; }
+.mt-2         { margin-top: 2px; }
+.mt-3         { margin-top: 3px; }
+.mt-4         { margin-top: 4px; }
+.mt-8         { margin-top: 8px; }
+.mt-12        { margin-top: 12px; }
+.mt-14        { margin-top: 14px; }
+.ml-4         { margin-left: 4px; }
+.ml-6         { margin-left: 6px; }
+.ml-8         { margin-left: 8px; }
+.mr-3         { margin-right: 3px; }
+.mx-8         { margin-left: 8px; margin-right: 8px; }
+
+/* ---------- 布局补充 ---------- */
+.text-center  { text-align: center; }
+.text-left    { text-align: left; }
+
+/* ---------- 交互补充 ---------- */
+.cursor-pointer { cursor: pointer; }
+
+/* ---------- accent 补充 ---------- */
+.accent-purple { --accent-color: #8b5cf6; }
+.accent-muted  { --accent-color: #64748b; }
+
+/* ---------- 颜色补充 ---------- */
+.txt-muted-l  { color: #cbd5e1; }      /* 极浅灰 */
+.txt-purple   { color: #8b5cf6; }      /* 紫色 */
+.txt-green-d  { color: #16a34a; }      /* 深绿色 */
+
+/* ---------- 背景补充 ---------- */
+.bg-warn      { background: #f59e0b; }
+
+/* ---------- flex 补充 ---------- */
+.flex-sb      { display: flex; justify-content: space-between; }
+.flex-gap-4   { display: flex; gap: 4px; }
+.flex-gap-6   { display: flex; gap: 6px; }
+.flex-gap-8   { display: flex; gap: 8px; }
+.flex-gap-10  { display: flex; gap: 10px; }
+.flex-gap-20  { display: flex; gap: 20px; }
+.flex-center-gap-6  { display: flex; align-items: center; gap: 6px; }
+.flex-center-gap-8  { display: flex; align-items: center; gap: 8px; }
+.flex-wrap    { flex-wrap: wrap; }
+.flex-wrap-gap-6  { display: flex; flex-wrap: wrap; gap: 6px; }
+.flex-wrap-gap-4  { display: flex; flex-wrap: wrap; gap: 4px; }
+.flex-col     { display: flex; flex-direction: column; }
+.inline-flex-center { display: inline-flex; align-items: center; }
+
+/* ---------- 输入框增强 ---------- */
+.input-std-full {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 13px;
+    font-family: inherit;
+    outline: none;
+    transition: border .2s;
+}
+.input-std-full:focus { border-color: #3b82f6; }
+
+.input-std-w {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 13px;
+}
+
+/* ---------- 复合布局 ---------- */
+.flex-between-label {
+    align-items: center;
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 14px;
+}
+.flex-between-mb {
+    align-items: center;
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 14px;
+}
+.grid-2-1fr-gap10 {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+.grid-2eq-gap12 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+.grid-2eq-gap16 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+.grid-4eq {
+    grid-template-columns: repeat(4, 1fr);
+}
+
+/* ---------- 代码块风格 ---------- */
+.code-block {
+    background: #0d1117;
+    color: #e6edf3;
+    padding: 18px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-family: 'Cascadia Code', 'Fira Code', 'Courier New', monospace;
+    line-height: 1.65;
+    overflow: auto;
+    white-space: pre;
+    max-height: 500px;
+}
+
+/* ---------- 告警/错误/成功提示块 ---------- */
+.alert-block-err {
+    padding: 10px 14px;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 7px;
+    color: #dc2626;
+    font-size: 13px;
+}
+.alert-block-ok {
+    padding: 10px 14px;
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 7px;
+    color: #16a34a;
+    font-size: 13px;
+}
+
+/* ---------- 内联标签 ---------- */
+.inline-tag {
+    padding: 3px 8px;
+    background: #f1f5f9;
+    border-radius: 4px;
+    font-size: 11px;
+    font-family: monospace;
+    color: #334155;
+}
+.inline-badge-blue {
+    background: #3b82f6;
+    color: #fff;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+}
+
+/* ---------- 消息提示块 ---------- */
+.hint-block-amber {
+    margin-bottom: 12px;
+    padding: 6px 10px;
+    background: #fffbeb;
+    border-radius: 6px;
+    font-size: 12px;
+    color: #92400e;
+}
+
+/* ---------- 步骤展示块 ---------- */
+.step-row {
+    padding: 8px 12px;
+    border-left: 3px solid #3b82f6;
+    background: #f8fafc;
+    margin-bottom: 6px;
+    border-radius: 0 6px 6px 0;
+}
+
+/* ---------- 加载页 & fallback 页面的 inline-style 替换类 ---------- */
+.loading-page {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    background: #f1f5f9;
+    color: #64748b;
+    font-family: sans-serif;
+}
+.loading-icon {
+    font-size: 36px;
+    margin-bottom: 12px;
+    animation: spin 1.2s linear infinite;
+    display: inline-block;
+}
+.fallback-icon {
+    font-size: 40px;
+    margin-bottom: 12px;
+}
+.fallback-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #1e293b;
+    margin-bottom: 8px;
+}
+.fallback-sub {
+    font-size: 13px;
+}
+
+/* ---------- 宽度工具 ---------- */
+.w-160 { width: 160px; }
+.w-auto { width: auto; }

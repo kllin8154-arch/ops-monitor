@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>运维监控平台</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>⊡</text></svg>">
+    <link rel="stylesheet" href="/classic.css">
+    <link rel="stylesheet" href="/classic-patch.css">
+    <link rel="stylesheet" href="/admin-console.css">
+    <script src="/login-inject.js"></script>
+</head>
+<body>
+
+<div class="header">
+    <div class="header-title">
+        <h1 style="font-family:Georgia,'KaiTi','STKaiti',serif;font-style:italic">OpsMonitor</h1>
+        <p class="header-sub" style="font-family:Georgia,'KaiTi','STKaiti',serif;font-style:italic;font-size:12px">运维监控平台 v2.31</p>
+    </div>
+    <div class="header-links">
+        <a th:href="'http://127.0.0.1:' + ${prometheusPort}" target="_blank">⊡ Prometheus</a>
+        <a th:href="${grafanaUrl}" target="_blank">⧩ Grafana</a>
+        <a href="/api/health" target="_blank">💓 Health</a>
+        <a href="/admin.html" class="header-link-admin">⊡ 管理后台</a>
+        <span id="header-user" class="header-user"></span>
+        <a href="#" onclick="toggleClassicTheme();return false" id="theme-btn">🌙 深色</a>
+        <a id="header-logout" href="#" onclick="classicLogout();return false" class="header-logout">🚪 登出</a>
+    </div>
+</div>
+
+<div class="toast-wrap" id="toastWrap"></div>
+
+<div class="container">
+
+    <div th:if="${initError}" class="alert alert-err">
+        ⚠ <span th:text="${initError}"></span>
+    </div>
+
+    <!-- 状态卡片 -->
+    <div class="status-grid">
+        <div class="s-card">
+            <div class="label">Docker</div>
+            <div class="val">
+                <span th:class="${dockerConnected} ? 'dot dot-g' : 'dot dot-r'"></span>
+                <span th:text="${dockerConnected} ? '已连接' : '未连接'"></span>
+            </div>
+        </div>
+        <div class="s-card">
+            <div class="label">Prometheus</div>
+            <div class="val">
+                <span th:class="${prometheusRunning} ? 'dot dot-g' : 'dot dot-y'"></span>
+                <span th:text="${prometheusRunning} ? '运行中' : '等待中'"></span>
+            </div>
+        </div>
+        <div class="s-card">
+            <div class="label">Grafana</div>
+            <div class="val">
+                <span th:class="${grafanaRunning} ? 'dot dot-g' : 'dot dot-y'"></span>
+                <span th:text="${grafanaRunning} ? '运行中' : '等待中'"></span>
+            </div>
+        </div>
+        <div class="s-card">
+            <div class="label">容器总数</div>
+            <div class="val" id="containerCount">-</div>
+        </div>
+    </div>
+
+    <!-- 系统总览 -->
+    <div class="section" id="overviewSection">
+        <div class="section-hdr">
+            <h2>⊡ 系统总览</h2>
+            <span class="muted-tip" id="overviewTime">加载中...</span>
+        </div>
+        <div class="status-grid status-grid-3">
+            <div class="s-card">
+                <div class="label">CPU 使用率</div>
+                <div class="val" id="ov-cpu">-</div>
+                <div class="prog-bar prog-bar-sp"><div class="prog-fill prog-fill-success" id="ov-cpu-bar"></div></div>
+            </div>
+            <div class="s-card">
+                <div class="label">内存使用率</div>
+                <div class="val" id="ov-mem">-</div>
+                <div class="prog-bar prog-bar-sp"><div class="prog-fill prog-fill-success" id="ov-mem-bar"></div></div>
+            </div>
+            <div class="s-card">
+                <div class="label">磁盘使用率</div>
+                <div class="val" id="ov-disk">-</div>
+                <div class="prog-bar prog-bar-sp"><div class="prog-fill prog-fill-success" id="ov-disk-bar"></div></div>
+            </div>
+        </div>
+        <div style="margin-top:12px;">
+            <div style="font-size:13px;font-weight:600;margin-bottom:8px;">服务状态</div>
+            <div id="serviceGrid" class="service-grid">
+                <span class="muted-tip">加载中...</span>
+            </div>
+        </div>
+        <!-- v2.19: 系统健康摘要 -->
+        <div id="healthBanner" class="card" style="margin-top:12px;padding:12px 16px;display:none;border-left:4px solid #ccc">
+            <div id="healthBannerText" style="font-size:14px;font-weight:500"></div>
+        </div>
+    </div>
+
+    <!-- 容器管理 -->
+    <div class="section">
+        <div class="section-hdr">
+            <h2>⊞ 容器管理</h2>
+            <button class="btn btn-p btn-sm" onclick="loadContainers(true)">🔄 刷新</button>
+        </div>
+        <div class="toolbar">
+            <input type="text" id="filterName" placeholder="⚙ 搜索容器名称..." style="width:220px;" oninput="debounceLoad()">
+            <select id="filterStatus" onchange="loadContainers()">
+                <option value="">全部状态</option>
+                <option value="running">运行中</option>
+                <option value="exited">已停止</option>
+                <option value="paused">已暂停</option>
+                <option value="created">已创建</option>
+            </select>
+            <span style="color:var(--muted);font-size:12px;" id="lastRefresh"></span>
+        </div>
+        <div class="tbl-wrap">
+            <table>
+                <thead><tr><th>容器ID</th><th>名称</th><th>镜像</th><th>状态</th><th>端口</th><th class="stat-cell">CPU / 内存</th><th>操作</th></tr></thead>
+                <tbody id="containerList"><tr><td colspan="7" class="loading">加载中...</td></tr></tbody>
+            </table>
+        </div>
+        <div class="pager" id="pager" style="display:none;">
+            <span id="pagerInfo"></span>
+            <div class="pager-btns">
+                <button class="btn btn-o btn-sm" id="prevBtn" onclick="prevPage()">‹ 上一页</button>
+                <button class="btn btn-o btn-sm" id="nextBtn" onclick="nextPage()">下一页 ›</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 监控面板 -->
+    <div class="section">
+        <div class="section-hdr"><h2>⊡ 监控面板</h2></div>
+        <p style="color:var(--muted);margin-bottom:12px;">通过 Grafana 查看详细监控数据</p>
+        <a th:href="${grafanaUrl}" target="_blank" class="btn btn-s">打开 Grafana</a>
+        <a th:href="'http://127.0.0.1:' + ${prometheusPort}" target="_blank" class="btn btn-p">打开 Prometheus</a>
+    </div>
+
+    <!-- 服务器管理 -->
+    <div class="section">
+        <div class="section-hdr">
+            <h2>⊡ 服务器管理</h2>
+            <div style="display:flex;gap:8px;">
+                <button class="btn btn-s btn-sm" onclick="showAddServerForm()">➕ 添加服务器</button>
+                <button class="btn btn-p btn-sm" onclick="loadServers()">🔄 刷新</button>
+            </div>
+        </div>
+        <div id="addServerForm" class="add-form">
+            <div class="add-form-row">
+                <div class="add-form-field">
+                    <label>服务器名称</label>
+                    <input type="text" id="srvName" placeholder="如:生产数据库、Web服务器" maxlength="50">
+                </div>
+                <div class="add-form-field add-form-field-wide">
+                    <label>IP 地址</label>
+                    <input type="text" id="srvHost" placeholder="192.168.1.10(仅填 IP,不加端口)" maxlength="100" pattern="^[0-9a-zA-Z\.\-]+$">
+                </div>
+                <div class="add-form-field">
+                    <label>描述(可选)</label>
+                    <input type="text" id="srvDesc" placeholder="">
+                </div>
+                <button class="btn btn-s" id="addServerBtn" onclick="doAddServer()">添加</button>
+                <button class="btn btn-o btn-sm" onclick="hideAddServerForm()">取消</button>
+            </div>
+        </div>
+        <div id="serverGrid" class="card-grid">
+            <div class="muted-tip">加载中...</div>
+        </div>
+    </div>
+
+    <!-- Exporter 管理 -->
+    <div class="section">
+        <div class="section-hdr">
+            <h2>🔌 Exporter 管理</h2>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <button class="btn btn-s btn-sm" onclick="showRegisterForm()">➕ 注册 Exporter</button>
+                <div style="position:relative;display:inline-block;">
+                    <button class="btn btn-v btn-sm" onclick="toggleQuickMenu()" id="quickMenuBtn">⚡ 一键注册 ▾</button>
+                    <div id="quickMenu" style="display:none;position:absolute;top:100%;left:0;margin-top:4px;background:#fff;border:1px solid #d9d9d9;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.12);z-index:100;min-width:220px;">
+                        <div style="padding:6px 0;">
+                            <!-- v2.21: 一键全部注册 -->
+                        <div class="qm-item" onclick="quickRegisterAll()" style="background:#f0fdf4;font-weight:600">⊞ 全部注册（本机 node + process）</div>
+                        <div style="height:1px;background:#e2e8f0;margin:2px 8px"></div>
+                        <div class="qm-item" onclick="quickRegister('redis','redis://host.docker.internal:6379')">🔴 Redis (localhost:6379)</div>
+                            <div class="qm-item" onclick="quickRegister('mysql','host.docker.internal:3306')">🐬 MySQL (localhost:3306)</div>
+                            <div class="qm-item" onclick="quickRegister('postgres','host.docker.internal:5432')">🐘 PostgreSQL (localhost:5432)</div>
+                            <div class="qm-item" onclick="quickRegister('nginx','http://host.docker.internal/stub_status')">🌐 Nginx (localhost/stub_status)</div>
+                            <div class="qm-item" onclick="quickRegister('oracle','host.docker.internal:1521')">🏛 Oracle (localhost:1521)</div>
+                            <div class="qm-item" onclick="quickRegister('kingbase','host.docker.internal:54321')">👑 Kingbase (localhost:54321)</div>
+                            <div class="qm-item" onclick="quickRegister('geoserver','host.docker.internal:1099')">🗺 GeoServer (localhost:1099)</div>
+                        </div>
+                    </div>
+                </div>
+                <button class="btn btn-p btn-sm" onclick="loadExporters()">🔄 刷新</button>
+            </div>
+        </div>
+        <div id="registerForm" style="display:none;background:#fafafa;border-radius:8px;padding:16px;margin-bottom:16px;">
+            <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
+                <div>
+                    <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">目标服务器</label>
+                    <select id="regServer" onchange="onServerChange()" style="padding:6px 10px;border:1px solid #d9d9d9;border-radius:6px;font-size:13px;"><option value="local">本机 (Docker 模式)</option></select>
+                </div>
+                <div>
+                    <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Exporter 类型</label>
+                    <select id="regType" onchange="onTypeChange()" style="padding:6px 10px;border:1px solid #d9d9d9;border-radius:6px;font-size:13px;"><option value="">选择类型...</option></select>
+                </div>
+                <div>
+                    <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">服务地址</label>
+                    <span id="regAddrLabel" style="font-size:12px;color:#666;">服务地址</span>
+                    <input type="text" id="regTargetAddress" placeholder="选择类型后自动填充" style="width:320px;padding:6px 10px;border:1px solid #d9d9d9;border-radius:6px;font-size:13px;">
+                </div>
+                <div>
+                    <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">端口（可选）</label>
+                    <input type="number" id="regPort" placeholder="默认" style="width:80px;padding:6px 10px;border:1px solid #d9d9d9;border-radius:6px;font-size:13px;">
+                </div>
+                <div>
+                    <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">项目名</label>
+                    <input type="text" id="regProject" placeholder="如 order-system" style="width:140px;padding:6px 10px;border:1px solid #d9d9d9;border-radius:6px;font-size:13px;">
+                </div>
+                <div>
+                    <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">服务名</label>
+                    <input type="text" id="regService" placeholder="如 api" style="width:100px;padding:6px 10px;border:1px solid #d9d9d9;border-radius:6px;font-size:13px;">
+                </div>
+                <button class="btn btn-p btn-sm" onclick="doTestConnection()">⚙ 测试连接</button>
+                <button class="btn btn-s btn-sm" onclick="doRegister()">注册</button>
+                <button class="btn btn-o btn-sm" onclick="hideRegisterForm()">取消</button>
+            </div>
+            <div id="regHint" style="font-size:11px;color:var(--muted);margin-top:8px;"></div>
+            <div id="testResult" style="display:none;font-size:12px;margin-top:6px;padding:6px 10px;border-radius:4px;"></div>
+        </div>
+        <div class="tbl-wrap">
+            <table>
+                <thead><tr><th>ID</th><th>服务器</th><th>类型</th><th>服务地址</th><th>状态</th><th>端口</th><th>操作</th></tr></thead>
+                <tbody id="exporterList"><tr><td colspan="7" class="loading">加载中...</td></tr></tbody>
+            </table>
+        </div>
+        <div style="margin-top:14px;padding:12px 16px;background:#f6f8fa;border-radius:6px;font-size:12px;color:var(--muted);line-height:1.8;">
+            <strong style="color:var(--text);">◆ Exporter 工作原理</strong><br>
+            ① 为每个服务创建一个 Exporter 容器，将服务指标转换为 Prometheus 格式<br>
+            ② Prometheus 每 15 秒自动抓取 Exporter 数据<br>
+            ③ Grafana 从 Prometheus 读取数据并展示图表<br>
+            ④ 服务地址使用 <code>host.docker.internal</code> 指向宿主机，或填写实际 IP
+        </div>
+    </div>
+
+</div><!-- /container -->
+
+<!-- 日志弹窗 -->
+<div class="modal-overlay" id="logOverlay" onclick="closeLog()"></div>
+<div class="modal log-modal" id="logModal">
+    <div class="log-hdr">
+        <h3 id="logTitle">容器日志</h3>
+        <div style="display:flex;gap:8px;align-items:center;">
+            <select id="logTail" onchange="refreshLog()" style="background:#3d3d3d;color:#ccc;border:1px solid #555;border-radius:4px;padding:2px 6px;font-size:12px;">
+                <option value="100">100 行</option><option value="200" selected>200 行</option>
+                <option value="500">500 行</option><option value="1000">1000 行</option>
+            </select>
+            <button class="btn btn-p btn-sm" onclick="refreshLog()">刷新</button>
+            <button class="log-close log-close-r" onclick="closeLog()">✕</button>
+        </div>
+    </div>
+    <div class="log-body" id="logBody">加载中...</div>
+</div>
+
+<!-- Stats 弹窗 -->
+<div class="modal-overlay" id="statsOverlay" onclick="closeStats()"></div>
+<div class="modal stats-modal" id="statsModal">
+    <div class="stats-hdr">
+        <h3 id="statsTitle">资源监控</h3>
+        <div style="display:flex;gap:8px;">
+            <button class="btn btn-p btn-sm" onclick="refreshStats()">🔄 刷新</button>
+            <button class="log-close" style="background:#eee;" onclick="closeStats()">✕</button>
+        </div>
+    </div>
+    <div class="stats-body" id="statsBody">加载中...</div>
+</div>
+
+<script>
+    // FIX-TOKEN: 经典界面用户显示 — 仅依赖 localStorage 中的用户名（非 Token）做 UI 显示
+    // Token 认证由 httpOnly Cookie 承载，JS 无法读取（这是安全目的）
+    (function() {
+        var user = localStorage.getItem('ops_user');
+        // FIX-TOKEN: 不再用 localStorage token 判断是否已登录，改为用用户名存在性
+        // 即使 Cookie 过期，服务端 API 会返回 401，login-inject.js 会弹出登录框
+        if (user) {
+            var el = document.getElementById('header-user');
+            var lo = document.getElementById('header-logout');
+            if (el) { el.textContent = '⊙ ' + user; el.style.display = 'inline'; }
+            if (lo) lo.style.display = 'inline';
+        }
+    })();
+
+    function classicLogout() {
+        // FIX-TOKEN: 同时通过 Bearer Header（旧 Token）和 Cookie 通知服务端登出
+        // credentials:'include' 确保 httpOnly Cookie 随请求发送，服务端可清除 Cookie 中的 Token
+        var token = localStorage.getItem('ops_token');
+        var headers = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+
+        fetch('/api/auth/logout', {
+            method: 'POST',
+            headers: headers,
+            credentials: 'include'  // FIX-TOKEN: 携带 httpOnly Cookie，让服务端清除
+        }).catch(function(){});
+
+        // FIX-TOKEN: 清除 localStorage 中的降级兼容 Token 和用户名
+        localStorage.removeItem('ops_token');
+        localStorage.removeItem('ops_user');
+        location.reload();
+    }
+</script>
+<script src="/classic-app.js"></script>
+</body>
+</html>

@@ -1,0 +1,652 @@
+{
+  "uid" : "ops-middleware",
+  "title" : "\uD83D\uDDC4️ 数据库与中间件",
+  "tags" : [ "ops-monitor" ],
+  "timezone" : "browser",
+  "refresh" : "30s",
+  "time" : {
+    "from" : "now-1h",
+    "to" : "now"
+  },
+  "templating" : {
+    "list" : [ {
+      "name" : "server_name",
+      "type" : "query",
+      "label" : "\uD83D\uDDA5 服务器",
+      "datasource" : {
+        "type" : "prometheus",
+        "uid" : "VictoriaMetrics"
+      },
+      "query" : "label_values(up{managed_by=\"ops-monitor\",exporter_type!~\"node|windows\"},server_name)",
+      "refresh" : 2,
+      "includeAll" : true,
+      "allValue" : ".*",
+      "multi" : true
+    }, {
+      "name" : "exporter_type",
+      "type" : "query",
+      "label" : "\uD83D\uDD0C 服务类型",
+      "datasource" : {
+        "type" : "prometheus",
+        "uid" : "VictoriaMetrics"
+      },
+      "query" : "label_values(up{managed_by=\"ops-monitor\",exporter_type!~\"node|windows\",server_name=~\"$server_name\"},exporter_type)",
+      "refresh" : 2,
+      "includeAll" : true,
+      "allValue" : ".*",
+      "multi" : true
+    } ]
+  },
+  "panels" : [ {
+    "id" : 1,
+    "title" : "\uD83D\uDD0C 中间件服务在线状态",
+    "type" : "stat",
+    "description" : "数据库/中间件服务在线情况，绿=在线 红=离线",
+    "gridPos" : {
+      "x" : 0,
+      "y" : 0,
+      "w" : 16,
+      "h" : 4
+    },
+    "datasource" : {
+      "type" : "prometheus",
+      "uid" : "VictoriaMetrics"
+    },
+    "options" : {
+      "reduceOptions" : {
+        "calcs" : [ "lastNotNull" ]
+      },
+      "orientation" : "auto",
+      "textMode" : "value_and_name",
+      "colorMode" : "value",
+      "graphMode" : "none"
+    },
+    "targets" : [ {
+      "expr" : "(up{managed_by=\"ops-monitor\",exporter_type!~\"node|windows\",server_name=~\"$server_name\",exporter_type=~\"$exporter_type\"} * on(server_id) group_left() ops_remote_host_reachable{managed_by=\"ops-monitor\"}) or up{managed_by=\"ops-monitor\",exporter_type!~\"node|windows\",server_name=~\"$server_name\",exporter_type=~\"$exporter_type\"}",
+      "legendFormat" : "{{server_name}} / {{exporter_type}}",
+      "refId" : "A"
+    } ],
+    "fieldConfig" : {
+      "defaults" : {
+        "thresholds" : {
+          "mode" : "absolute",
+          "steps" : [ {
+            "color" : "red",
+            "value" : null
+          }, {
+            "color" : "green",
+            "value" : 1
+          } ]
+        },
+        "color" : {
+          "mode" : "thresholds"
+        },
+        "mappings" : [ {
+          "type" : "value",
+          "options" : {
+            "0" : {
+              "text" : "✗ 离线",
+              "color" : "red",
+              "index" : 0
+            },
+            "1" : {
+              "text" : "✓ 在线",
+              "color" : "green",
+              "index" : 1
+            }
+          }
+        } ],
+        "noValue" : "暂无中间件服务"
+      }
+    }
+  }, {
+    "id" : 100,
+    "title" : "中间件总数",
+    "type" : "stat",
+    "gridPos" : {
+      "x" : 16,
+      "y" : 0,
+      "w" : 4,
+      "h" : 2
+    },
+    "datasource" : {
+      "type" : "prometheus",
+      "uid" : "VictoriaMetrics"
+    },
+    "targets" : [ {
+      "expr" : "count(up{managed_by=\"ops-monitor\",exporter_type!~\"node|windows\",server_name=~\"$server_name\",exporter_type=~\"$exporter_type\"})",
+      "refId" : "A",
+      "instant" : true
+    } ],
+    "options" : {
+      "reduceOptions" : {
+        "calcs" : [ "lastNotNull" ]
+      },
+      "orientation" : "auto",
+      "textMode" : "auto",
+      "colorMode" : "value",
+      "graphMode" : "none"
+    },
+    "fieldConfig" : {
+      "defaults" : {
+        "color" : {
+          "mode" : "fixed",
+          "fixedColor" : "blue"
+        },
+        "unit" : "short",
+        "noValue" : "—"
+      }
+    }
+  }, {
+    "id" : 101,
+    "title" : "✅ 在线",
+    "type" : "stat",
+    "gridPos" : {
+      "x" : 20,
+      "y" : 0,
+      "w" : 4,
+      "h" : 2
+    },
+    "datasource" : {
+      "type" : "prometheus",
+      "uid" : "VictoriaMetrics"
+    },
+    "targets" : [ {
+      "expr" : "count((up{managed_by=\"ops-monitor\",exporter_type!~\"node|windows\",server_name=~\"$server_name\",exporter_type=~\"$exporter_type\"} * on(server_id) group_left() ops_remote_host_reachable{managed_by=\"ops-monitor\"}) == 1)",
+      "refId" : "A",
+      "instant" : true
+    } ],
+    "options" : {
+      "reduceOptions" : {
+        "calcs" : [ "lastNotNull" ]
+      },
+      "textMode" : "auto",
+      "colorMode" : "value",
+      "graphMode" : "none"
+    },
+    "fieldConfig" : {
+      "defaults" : {
+        "color" : {
+          "mode" : "fixed",
+          "fixedColor" : "green"
+        },
+        "unit" : "short",
+        "noValue" : "—"
+      }
+    }
+  }, {
+    "id" : 102,
+    "title" : "\uD83D\uDD34 离线",
+    "type" : "stat",
+    "gridPos" : {
+      "x" : 16,
+      "y" : 2,
+      "w" : 4,
+      "h" : 2
+    },
+    "datasource" : {
+      "type" : "prometheus",
+      "uid" : "VictoriaMetrics"
+    },
+    "targets" : [ {
+      "expr" : "count((up{managed_by=\"ops-monitor\",exporter_type!~\"node|windows\",server_name=~\"$server_name\",exporter_type=~\"$exporter_type\"} * on(server_id) group_left() ops_remote_host_reachable{managed_by=\"ops-monitor\"}) == 0)",
+      "refId" : "A",
+      "instant" : true
+    } ],
+    "options" : {
+      "reduceOptions" : {
+        "calcs" : [ "lastNotNull" ]
+      },
+      "textMode" : "auto",
+      "colorMode" : "value",
+      "graphMode" : "none"
+    },
+    "fieldConfig" : {
+      "defaults" : {
+        "color" : {
+          "mode" : "thresholds"
+        },
+        "thresholds" : {
+          "mode" : "absolute",
+          "steps" : [ {
+            "color" : "green",
+            "value" : null
+          }, {
+            "color" : "red",
+            "value" : 1
+          } ]
+        },
+        "unit" : "short",
+        "noValue" : "—"
+      }
+    }
+  }, {
+    "id" : 103,
+    "title" : "类型数",
+    "type" : "stat",
+    "gridPos" : {
+      "x" : 20,
+      "y" : 2,
+      "w" : 4,
+      "h" : 2
+    },
+    "datasource" : {
+      "type" : "prometheus",
+      "uid" : "VictoriaMetrics"
+    },
+    "targets" : [ {
+      "expr" : "count(count by(exporter_type)(up{managed_by=\"ops-monitor\",exporter_type!~\"node|windows\",server_name=~\"$server_name\",exporter_type=~\"$exporter_type\"}))",
+      "refId" : "A",
+      "instant" : true
+    } ],
+    "options" : {
+      "reduceOptions" : {
+        "calcs" : [ "lastNotNull" ]
+      },
+      "textMode" : "auto",
+      "colorMode" : "value",
+      "graphMode" : "none"
+    },
+    "fieldConfig" : {
+      "defaults" : {
+        "color" : {
+          "mode" : "fixed",
+          "fixedColor" : "purple"
+        },
+        "unit" : "short",
+        "noValue" : "—"
+      }
+    }
+  }, {
+    "id" : 2,
+    "type" : "row",
+    "title" : "Redis",
+    "gridPos" : {
+      "h" : 1,
+      "w" : 24,
+      "x" : 0,
+      "y" : 4
+    },
+    "collapsed" : false
+  }, {
+    "id" : 3,
+    "title" : "Redis — 已用内存",
+    "type" : "timeseries",
+    "gridPos" : {
+      "h" : 7,
+      "w" : 8,
+      "x" : 0,
+      "y" : 5
+    },
+    "datasource" : {
+      "type" : "prometheus",
+      "uid" : "VictoriaMetrics"
+    },
+    "targets" : [ {
+      "expr" : "redis_memory_used_bytes{server_name=~\"$server_name\"}",
+      "legendFormat" : "{{server_name}}",
+      "refId" : "A"
+    } ],
+    "fieldConfig" : {
+      "defaults" : {
+        "unit" : "bytes",
+        "color" : {
+          "mode" : "palette-classic"
+        },
+        "custom" : {
+          "lineWidth" : 2,
+          "fillOpacity" : 8
+        }
+      }
+    }
+  }, {
+    "id" : 4,
+    "title" : "Redis — 命中率",
+    "type" : "timeseries",
+    "gridPos" : {
+      "h" : 7,
+      "w" : 8,
+      "x" : 8,
+      "y" : 5
+    },
+    "datasource" : {
+      "type" : "prometheus",
+      "uid" : "VictoriaMetrics"
+    },
+    "targets" : [ {
+      "expr" : "rate(redis_keyspace_hits_total{server_name=~\"$server_name\"}[5m]) / (rate(redis_keyspace_hits_total{server_name=~\"$server_name\"}[5m]) + rate(redis_keyspace_misses_total{server_name=~\"$server_name\"}[5m])) * 100",
+      "legendFormat" : "{{server_name}} 命中率",
+      "refId" : "A"
+    } ],
+    "fieldConfig" : {
+      "defaults" : {
+        "unit" : "percent",
+        "min" : 0,
+        "max" : 100,
+        "color" : {
+          "mode" : "palette-classic"
+        },
+        "custom" : {
+          "lineWidth" : 2,
+          "fillOpacity" : 8
+        }
+      }
+    }
+  }, {
+    "id" : 5,
+    "title" : "Redis — 连接数 & Key数",
+    "type" : "timeseries",
+    "gridPos" : {
+      "h" : 7,
+      "w" : 8,
+      "x" : 16,
+      "y" : 5
+    },
+    "datasource" : {
+      "type" : "prometheus",
+      "uid" : "VictoriaMetrics"
+    },
+    "targets" : [ {
+      "expr" : "redis_connected_clients{server_name=~\"$server_name\"}",
+      "legendFormat" : "{{server_name}} 连接数",
+      "refId" : "A"
+    }, {
+      "expr" : "redis_db_keys{server_name=~\"$server_name\"}",
+      "legendFormat" : "{{server_name}} Key数",
+      "refId" : "B"
+    } ],
+    "fieldConfig" : {
+      "defaults" : {
+        "color" : {
+          "mode" : "palette-classic"
+        },
+        "custom" : {
+          "lineWidth" : 2
+        }
+      }
+    }
+  }, {
+    "id" : 6,
+    "type" : "row",
+    "title" : "MySQL",
+    "gridPos" : {
+      "h" : 1,
+      "w" : 24,
+      "x" : 0,
+      "y" : 12
+    },
+    "collapsed" : false
+  }, {
+    "id" : 7,
+    "title" : "MySQL — QPS",
+    "type" : "timeseries",
+    "gridPos" : {
+      "h" : 7,
+      "w" : 8,
+      "x" : 0,
+      "y" : 13
+    },
+    "datasource" : {
+      "type" : "prometheus",
+      "uid" : "VictoriaMetrics"
+    },
+    "targets" : [ {
+      "expr" : "rate(mysql_global_status_questions{server_name=~\"$server_name\"}[5m])",
+      "legendFormat" : "{{server_name}} QPS",
+      "refId" : "A"
+    } ],
+    "fieldConfig" : {
+      "defaults" : {
+        "unit" : "reqps",
+        "color" : {
+          "mode" : "palette-classic"
+        },
+        "custom" : {
+          "lineWidth" : 2,
+          "fillOpacity" : 8
+        }
+      }
+    }
+  }, {
+    "id" : 8,
+    "title" : "MySQL — 连接数",
+    "type" : "timeseries",
+    "gridPos" : {
+      "h" : 7,
+      "w" : 8,
+      "x" : 8,
+      "y" : 13
+    },
+    "datasource" : {
+      "type" : "prometheus",
+      "uid" : "VictoriaMetrics"
+    },
+    "targets" : [ {
+      "expr" : "mysql_global_status_threads_connected{server_name=~\"$server_name\"}",
+      "legendFormat" : "{{server_name}} 活跃连接",
+      "refId" : "A"
+    }, {
+      "expr" : "mysql_global_variables_max_connections{server_name=~\"$server_name\"}",
+      "legendFormat" : "{{server_name}} 最大连接",
+      "refId" : "B"
+    } ],
+    "fieldConfig" : {
+      "defaults" : {
+        "color" : {
+          "mode" : "palette-classic"
+        },
+        "custom" : {
+          "lineWidth" : 2
+        }
+      }
+    }
+  }, {
+    "id" : 9,
+    "title" : "MySQL — 慢查询",
+    "type" : "timeseries",
+    "gridPos" : {
+      "h" : 7,
+      "w" : 8,
+      "x" : 16,
+      "y" : 13
+    },
+    "datasource" : {
+      "type" : "prometheus",
+      "uid" : "VictoriaMetrics"
+    },
+    "targets" : [ {
+      "expr" : "rate(mysql_global_status_slow_queries{server_name=~\"$server_name\"}[5m])",
+      "legendFormat" : "{{server_name}} 慢查询/s",
+      "refId" : "A"
+    } ],
+    "fieldConfig" : {
+      "defaults" : {
+        "unit" : "reqps",
+        "color" : {
+          "mode" : "palette-classic"
+        },
+        "custom" : {
+          "lineWidth" : 2,
+          "fillOpacity" : 8
+        },
+        "thresholds" : {
+          "steps" : [ {
+            "color" : "green",
+            "value" : null
+          }, {
+            "color" : "yellow",
+            "value" : 1
+          }, {
+            "color" : "red",
+            "value" : 5
+          } ]
+        }
+      }
+    }
+  }, {
+    "id" : 10,
+    "type" : "row",
+    "title" : "PostgreSQL",
+    "gridPos" : {
+      "h" : 1,
+      "w" : 24,
+      "x" : 0,
+      "y" : 20
+    },
+    "collapsed" : false
+  }, {
+    "id" : 11,
+    "title" : "PostgreSQL — 数据库大小 & 连接",
+    "type" : "timeseries",
+    "gridPos" : {
+      "h" : 7,
+      "w" : 12,
+      "x" : 0,
+      "y" : 21
+    },
+    "datasource" : {
+      "type" : "prometheus",
+      "uid" : "VictoriaMetrics"
+    },
+    "targets" : [ {
+      "expr" : "pg_database_size_bytes{server_name=~\"$server_name\"}",
+      "legendFormat" : "{{server_name}} {{datname}} 大小",
+      "refId" : "A"
+    }, {
+      "expr" : "pg_stat_database_numbackends{server_name=~\"$server_name\"}",
+      "legendFormat" : "{{server_name}} {{datname}} 连接",
+      "refId" : "B"
+    } ],
+    "fieldConfig" : {
+      "defaults" : {
+        "color" : {
+          "mode" : "palette-classic"
+        },
+        "custom" : {
+          "lineWidth" : 2
+        }
+      }
+    }
+  }, {
+    "id" : 12,
+    "title" : "PostgreSQL — 事务 & 锁等待",
+    "type" : "timeseries",
+    "gridPos" : {
+      "h" : 7,
+      "w" : 12,
+      "x" : 12,
+      "y" : 21
+    },
+    "datasource" : {
+      "type" : "prometheus",
+      "uid" : "VictoriaMetrics"
+    },
+    "targets" : [ {
+      "expr" : "rate(pg_stat_database_xact_commit{server_name=~\"$server_name\"}[5m])",
+      "legendFormat" : "{{server_name}} 提交/s",
+      "refId" : "A"
+    }, {
+      "expr" : "rate(pg_stat_database_xact_rollback{server_name=~\"$server_name\"}[5m])",
+      "legendFormat" : "{{server_name}} 回滚/s",
+      "refId" : "B"
+    }, {
+      "expr" : "pg_locks_count{server_name=~\"$server_name\"}",
+      "legendFormat" : "{{server_name}} 锁数量",
+      "refId" : "C"
+    } ],
+    "fieldConfig" : {
+      "defaults" : {
+        "color" : {
+          "mode" : "palette-classic"
+        },
+        "custom" : {
+          "lineWidth" : 2
+        }
+      }
+    }
+  }, {
+    "id" : 13,
+    "type" : "row",
+    "title" : "Nginx",
+    "gridPos" : {
+      "h" : 1,
+      "w" : 24,
+      "x" : 0,
+      "y" : 28
+    },
+    "collapsed" : false
+  }, {
+    "id" : 14,
+    "title" : "Nginx — 请求速率 & 活跃连接",
+    "type" : "timeseries",
+    "gridPos" : {
+      "h" : 7,
+      "w" : 12,
+      "x" : 0,
+      "y" : 29
+    },
+    "datasource" : {
+      "type" : "prometheus",
+      "uid" : "VictoriaMetrics"
+    },
+    "targets" : [ {
+      "expr" : "rate(nginx_connections_handled{server_name=~\"$server_name\"}[5m])",
+      "legendFormat" : "{{server_name}} 请求/s",
+      "refId" : "A"
+    }, {
+      "expr" : "nginx_connections_active{server_name=~\"$server_name\"}",
+      "legendFormat" : "{{server_name}} 活跃连接",
+      "refId" : "B"
+    } ],
+    "fieldConfig" : {
+      "defaults" : {
+        "color" : {
+          "mode" : "palette-classic"
+        },
+        "custom" : {
+          "lineWidth" : 2,
+          "fillOpacity" : 8
+        }
+      }
+    }
+  }, {
+    "id" : 15,
+    "title" : "Nginx — 连接状态分布",
+    "type" : "timeseries",
+    "gridPos" : {
+      "h" : 7,
+      "w" : 12,
+      "x" : 12,
+      "y" : 29
+    },
+    "datasource" : {
+      "type" : "prometheus",
+      "uid" : "VictoriaMetrics"
+    },
+    "targets" : [ {
+      "expr" : "nginx_connections_reading{server_name=~\"$server_name\"}",
+      "legendFormat" : "{{server_name}} 读",
+      "refId" : "A"
+    }, {
+      "expr" : "nginx_connections_writing{server_name=~\"$server_name\"}",
+      "legendFormat" : "{{server_name}} 写",
+      "refId" : "B"
+    }, {
+      "expr" : "nginx_connections_waiting{server_name=~\"$server_name\"}",
+      "legendFormat" : "{{server_name}} 等待",
+      "refId" : "C"
+    } ],
+    "fieldConfig" : {
+      "defaults" : {
+        "color" : {
+          "mode" : "palette-classic"
+        },
+        "custom" : {
+          "lineWidth" : 2
+        }
+      }
+    }
+  } ],
+  "schemaVersion" : 39,
+  "version" : 9
+}

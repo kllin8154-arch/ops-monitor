@@ -1,0 +1,881 @@
+{
+  "uid": "ops-service-health",
+  "title": "🔌 Sentinel — 服务健康 & SLO",
+  "tags": [
+    "ops-monitor",
+    "sentinel",
+    "slo"
+  ],
+  "timezone": "browser",
+  "refresh": "15s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "schemaVersion": 39,
+  "version": 9,
+  "templating": {
+    "list": [
+      {
+        "name": "server_name",
+        "type": "query",
+        "label": "🖥 服务器",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "VictoriaMetrics"
+        },
+        "query": "label_values(up{managed_by=\"ops-monitor\"},server_name)",
+        "refresh": 2,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true
+      },
+      {
+        "name": "exporter_type",
+        "type": "query",
+        "label": "🔌 类型",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "VictoriaMetrics"
+        },
+        "query": "label_values(up{managed_by=\"ops-monitor\",server_name=~\"$server_name\"},exporter_type)",
+        "refresh": 2,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "🔥 L1 决策层 — SLO & Error Budget",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false
+    },
+    {
+      "id": 2,
+      "title": "SLO — 服务可用率",
+      "type": "gauge",
+      "description": "服务水平目标：所有被管理 Exporter 的可用率。目标 ≥ 99.9%（每月允许宕机 43 分钟）。低于 99% 触发 P0。",
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 5,
+        "h": 6
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "VictoriaMetrics"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto"
+      },
+      "targets": [
+        {
+          "expr": "count(up{managed_by=\"ops-monitor\",server_name=~\"$server_name\",exporter_type=~\"$exporter_type\"} == 1) / count(up{managed_by=\"ops-monitor\",server_name=~\"$server_name\",exporter_type=~\"$exporter_type\"}) * 100",
+          "legendFormat": "SLO %",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 95,
+          "max": 100,
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 99
+              },
+              {
+                "color": "green",
+                "value": 99.9
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Error Budget — 月度剩余",
+      "type": "gauge",
+      "description": "月度错误预算剩余量。目标 SLO=99.9%，月度允许宕机 43 分钟。当前窗口内消耗情况。绿>50% 橙10-50% 红<10%",
+      "gridPos": {
+        "x": 5,
+        "y": 1,
+        "w": 5,
+        "h": 6
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "VictoriaMetrics"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto"
+      },
+      "targets": [
+        {
+          "expr": "clamp((1 - (1 - count(up{managed_by=\"ops-monitor\",server_name=~\"$server_name\"} == 1) / count(up{managed_by=\"ops-monitor\",server_name=~\"$server_name\"})) / (1 - 0.999)) * 100, -100, 100)",
+          "legendFormat": "预算剩余 %",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": -100,
+          "max": 100,
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 10
+              },
+              {
+                "color": "green",
+                "value": 50
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "null+nan",
+                "result": {
+                  "text": "N/A (无服务)",
+                  "color": "blue"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "P0 — 服务不可用",
+      "type": "stat",
+      "description": "P0：有 Exporter 完全离线（up=0），需立即响应",
+      "gridPos": {
+        "x": 10,
+        "y": 1,
+        "w": 4,
+        "h": 3
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "VictoriaMetrics"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "expr": "count(up{managed_by=\"ops-monitor\",server_name=~\"$server_name\",exporter_type=~\"$exporter_type\"} == 0) or vector(0)",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "0 ✓",
+                  "color": "green"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "P1 — 严重降级",
+      "type": "stat",
+      "description": "P1：Exporter 离线率 > 20%，服务严重降级",
+      "gridPos": {
+        "x": 14,
+        "y": 1,
+        "w": 4,
+        "h": 3
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "VictoriaMetrics"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "expr": "(1 - count(up{managed_by=\"ops-monitor\",server_name=~\"$server_name\"} == 1) / count(up{managed_by=\"ops-monitor\",server_name=~\"$server_name\"})) > 0.2 or vector(0)",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.001
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "正常 ✓",
+                  "color": "green"
+                }
+              }
+            },
+            {
+              "type": "range",
+              "options": {
+                "from": 0.001,
+                "to": 1,
+                "result": {
+                  "text": "P1 告警!",
+                  "color": "orange"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": 6,
+      "title": "P2 — 性能问题",
+      "type": "stat",
+      "description": "P2：离线率 5-20%，轻微降级，需关注",
+      "gridPos": {
+        "x": 18,
+        "y": 1,
+        "w": 3,
+        "h": 3
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "VictoriaMetrics"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "expr": "((1 - count(up{managed_by=\"ops-monitor\",server_name=~\"$server_name\"} == 1) / count(up{managed_by=\"ops-monitor\",server_name=~\"$server_name\"})) > 0.05 and (1 - count(up{managed_by=\"ops-monitor\",server_name=~\"$server_name\"} == 1) / count(up{managed_by=\"ops-monitor\",server_name=~\"$server_name\"})) <= 0.2) or vector(0)",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.001
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "正常 ✓",
+                  "color": "green"
+                }
+              }
+            },
+            {
+              "type": "range",
+              "options": {
+                "from": 0.001,
+                "to": 1,
+                "result": {
+                  "text": "P2 告警!",
+                  "color": "yellow"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": 7,
+      "title": "服务在线数 / 总数",
+      "type": "stat",
+      "gridPos": {
+        "x": 21,
+        "y": 1,
+        "w": 3,
+        "h": 3
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "VictoriaMetrics"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background"
+      },
+      "targets": [
+        {
+          "expr": "count(up{managed_by=\"ops-monitor\",server_name=~\"$server_name\",exporter_type=~\"$exporter_type\"} == 1) or vector(0)",
+          "legendFormat": "在线",
+          "instant": true,
+          "refId": "A"
+        },
+        {
+          "expr": "count(up{managed_by=\"ops-monitor\",server_name=~\"$server_name\",exporter_type=~\"$exporter_type\"}) or vector(0)",
+          "legendFormat": "总计",
+          "instant": true,
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        }
+      }
+    },
+    {
+      "id": 8,
+      "title": "SLO 可用率趋势 & Burn Rate",
+      "type": "timeseries",
+      "description": "绿线：实时可用率。红线：低于 SLO=99% 警戒线。趋势下滑意味着 Error Budget 正在被消耗。",
+      "gridPos": {
+        "x": 10,
+        "y": 4,
+        "w": 14,
+        "h": 3
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "VictoriaMetrics"
+      },
+      "targets": [
+        {
+          "expr": "count(up{managed_by=\"ops-monitor\",server_name=~\"$server_name\"} == 1) / count(up{managed_by=\"ops-monitor\",server_name=~\"$server_name\"}) * 100",
+          "legendFormat": "实时 SLO %",
+          "refId": "A"
+        },
+        {
+          "expr": "vector(99)",
+          "legendFormat": "SLO 目标 99%",
+          "refId": "B"
+        },
+        {
+          "expr": "vector(99.9)",
+          "legendFormat": "SLO 目标 99.9%",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 90,
+          "max": 100,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        }
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "id": 10,
+      "type": "row",
+      "title": "🟦 L2 运维值班层 — 服务健康蜂窝图",
+      "gridPos": {
+        "x": 0,
+        "y": 7,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false
+    },
+    {
+      "id": 11,
+      "title": "服务状态蜂窝图（绿=在线 红=离线）",
+      "type": "stat",
+      "description": "每个格子代表一个监控服务实例。绿色=在线，红色=离线。快速定位故障服务。",
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 16,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "VictoriaMetrics"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto",
+        "textMode": "name",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "(up{managed_by=\"ops-monitor\",server_name=~\"$server_name\",exporter_type=~\"$exporter_type\"} * on(server_id) group_left() ops_remote_host_reachable{managed_by=\"ops-monitor\"}) or up{managed_by=\"ops-monitor\",server_name=~\"$server_name\",exporter_type=~\"$exporter_type\"}",
+          "legendFormat": "{{server_name}}\n{{exporter_type}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "1": {
+                  "text": "✓ 在线",
+                  "color": "green"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "✗ 离线",
+                  "color": "red"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        }
+      }
+    },
+    {
+      "id": 12,
+      "title": "服务类型分布",
+      "type": "piechart",
+      "description": "按 exporter_type 分组统计各类监控服务数量",
+      "gridPos": {
+        "x": 16,
+        "y": 8,
+        "w": 8,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "VictoriaMetrics"
+      },
+      "options": {
+        "pieType": "donut",
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "expr": "count by(exporter_type)(up{managed_by=\"ops-monitor\",server_name=~\"$server_name\",exporter_type=~\"$exporter_type\"})",
+          "legendFormat": "{{exporter_type}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          }
+        }
+      }
+    },
+    {
+      "id": 13,
+      "title": "离线服务 — 按影响时长排序",
+      "type": "table",
+      "description": "Impact Score = 离线持续时长（秒）。优先处理离线时间最长的服务。",
+      "gridPos": {
+        "x": 16,
+        "y": 12,
+        "w": 8,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "VictoriaMetrics"
+      },
+      "targets": [
+        {
+          "expr": "sum_over_time(((up{managed_by=\"ops-monitor\",server_name=~\"$server_name\"} * on(server_id) group_left() ops_remote_host_reachable{managed_by=\"ops-monitor\"}) == 0)[1h:1m]) or sum_over_time((up{managed_by=\"ops-monitor\",server_name=~\"$server_name\"} == 0)[1h:1m])",
+          "format": "table",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": [
+              {
+                "desc": true,
+                "displayName": "Value"
+              }
+            ]
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "离线累计(分钟)"
+              },
+              {
+                "id": "custom.displayMode",
+                "value": "color-background"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "steps": [
+                    {
+                      "color": "yellow",
+                      "value": null
+                    },
+                    {
+                      "color": "red",
+                      "value": 10
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 20,
+      "type": "row",
+      "title": "📉 服务上下线历史 & 稳定性趋势",
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false
+    },
+    {
+      "id": 21,
+      "title": "服务上下线历史（1=在线 0=离线）",
+      "type": "timeseries",
+      "description": "过去1小时各服务在线状态变化。突然跌落到0的线段即为故障时间段。",
+      "gridPos": {
+        "x": 0,
+        "y": 17,
+        "w": 24,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "VictoriaMetrics"
+      },
+      "targets": [
+        {
+          "expr": "up{managed_by=\"ops-monitor\",server_name=~\"$server_name\",exporter_type=~\"$exporter_type\"}",
+          "legendFormat": "{{server_name}} / {{exporter_type}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 1,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 20,
+            "spanNulls": false
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "离线"
+                },
+                "1": {
+                  "text": "在线"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        }
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "id": 30,
+      "type": "row",
+      "title": "⚫ L3 专家诊断层 — 服务明细",
+      "gridPos": {
+        "x": 0,
+        "y": 25,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": true,
+      "panels": [
+        {
+          "id": 31,
+          "title": "服务明细表（含所有标签）",
+          "type": "table",
+          "description": "完整的服务列表，包含所有标签信息，用于专家级排查。",
+          "gridPos": {
+            "h": 10,
+            "w": 24,
+            "x": 0,
+            "y": 26
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "VictoriaMetrics"
+          },
+          "targets": [
+            {
+              "expr": "up{managed_by=\"ops-monitor\",server_name=~\"$server_name\",exporter_type=~\"$exporter_type\"}",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "managed_by": true
+                },
+                "renameByName": {
+                  "server_name": "服务器",
+                  "exporter_type": "类型",
+                  "instance": "采集地址",
+                  "job": "Job",
+                  "Value": "状态"
+                }
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "状态"
+                },
+                "properties": [
+                  {
+                    "id": "custom.displayMode",
+                    "value": "color-background"
+                  },
+                  {
+                    "id": "mappings",
+                    "value": [
+                      {
+                        "type": "value",
+                        "options": {
+                          "1": {
+                            "text": "在线 ✓",
+                            "color": "green"
+                          },
+                          "0": {
+                            "text": "离线 ✗",
+                            "color": "red"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

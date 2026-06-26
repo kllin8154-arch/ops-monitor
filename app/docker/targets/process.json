@@ -1,0 +1,13 @@
+[ {
+  "targets" : [ "ops-process-exporter-9256:9256" ],
+  "labels" : {
+    "server_id" : "local",
+    "server_name" : "本机",
+    "exporter_type" : "process",
+    "managed_by" : "ops-monitor",
+    "exporter_id" : "local-process-9256",
+    "project" : "ops-monitor",
+    "service" : "test",
+    "node" : "local"
+  }
+} ]

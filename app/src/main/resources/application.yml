@@ -1,0 +1,83 @@
+server:
+  port: 8080
+  address: 127.0.0.1
+
+spring:
+  application:
+    name: ops-monitor
+  thymeleaf:
+    prefix: classpath:/templates/
+    suffix: .html
+    cache: false
+
+# ===== 运维监控平台配置 =====
+ops-monitor:
+  # v2.22: 版本号（影响前端侧边栏显示，升级时修改此处即可）
+  version: v2.31
+
+  docker:
+    host: ${DOCKER_HOST:}
+    connect-timeout: 5000
+    read-timeout: 30000
+
+  compose:
+    work-dir: ${user.dir}/docker
+    # projectName 只允许字母、数字、- 和 _（代码层 validateProjectName 有校验）
+    project-name: ${OPS_PROJECT_NAME:ops-monitor}
+
+  prometheus:
+    port: 9090
+    config-path: ${user.dir}/docker/prometheus.yml
+    retention-days: 15
+
+  grafana:
+    port: 3000
+    admin-user: admin
+    # ⚠️ 生产环境必须通过环境变量注入: export OPS_GRAFANA_PASSWORD=<强密码>
+    admin-password: ${OPS_GRAFANA_PASSWORD:admin123}
+    dashboards-dir: ${user.dir}/docker/dashboards
+
+  security:
+    # ⚠️ 生产环境必须为 true
+    enabled: true
+    username: admin
+    # ⚠️ 默认密码 admin123 仅用于首次启动，启动日志会打 ERROR 提示修改
+    #    生产部署: export OPS_ADMIN_PASSWORD=<强密码>
+    password: ${OPS_ADMIN_PASSWORD:admin123}
+    # HMAC 签名密钥 (>=32字符，不能是已知公开值)
+    # 生成(Linux/Mac): export OPS_HMAC_SECRET=$(openssl rand -hex 32)
+    # 生成(Windows):   $env:OPS_HMAC_SECRET = -join ((48..57)+(65..90)+(97..122) | Get-Random -Count 48 | % {[char]$_})
+    hmac-secret: ${OPS_HMAC_SECRET:ops-monitor-default-dev-only-do-not-use-in-prod-must-change}
+    # v2.10 P2-07: AlertManager webhook 共享密钥
+    # 未配置(空)则 webhook 端点不校验 header,向后兼容(会打 WARN 警告)
+    # 生产部署强烈建议配置: export OPS_WEBHOOK_SECRET=$(openssl rand -hex 32)
+    # 同时需更新 alertmanager.yml 的 http_config.headers.X-Ops-Webhook-Secret
+    webhook-secret: ${OPS_WEBHOOK_SECRET:}
+
+  # SSH 执行安全配置 (SshStepExecutor 使用)
+  sentinel:
+    ssh:
+      # "no"  = 跳过主机密钥验证（内网默认）
+      # "yes" = 严格校验（需配置 known_hosts，生产推荐）
+      strict-host-key-checking: ${OPS_SSH_STRICT_HOST_KEY:no}
+      known-hosts-file: ${OPS_SSH_KNOWN_HOSTS:${user.home}/.ssh/known_hosts}
+      connect-timeout-seconds: ${OPS_SSH_CONNECT_TIMEOUT:10}
+      exec-timeout-seconds: ${OPS_SSH_EXEC_TIMEOUT:30}
+
+logging:
+  level:
+    com.opsmonitor: INFO
+    com.opsmonitor.core: INFO
+    com.github.dockerjava: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+# v2.26-sec: Actuator 端点限制 — 仅暴露 health
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never

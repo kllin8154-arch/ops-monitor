@@ -1,0 +1,102 @@
+# ============================================================
+# OpsMonitor Git 忽略规则
+# ============================================================
+
+# --- Maven 构建输出 ---
+target/
+*.jar
+*.war
+*.ear
+
+# --- IDE 配置文件 ---
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.eclipse/
+.settings/
+.classpath
+.project
+
+# --- 操作系统文件 ---
+.DS_Store
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# --- 日志文件 ---
+*.log
+logs/
+
+# --- 运行时数据（WAL / 持久化状态） ---
+data/agent-wal/
+data/*.json
+data/*.log
+app/data/agent-wal/
+app/data/*.json
+app/data/*.log
+
+# --- Agent / Claude 本地配置 ---
+.claude/
+.agents/
+.trae/
+skills-lock.json
+app/skills-lock.json
+app/skills/
+
+# --- 开源排除：内部建设资料 / Agent 约束 / 交付审查记录 ---
+z/
+CLAUDE.md
+AGENTS.md
+AGENT_RULES.md
+ROADMAP.md
+PRODUCT_SPEC.md
+GIT_COMMIT_CONVENTION.md
+ARCHITECTURE.md
+OpsMonitor_完整测试计划.md
+服务器监控系统_开发者快速参考文档.md
+*实施报告*.md
+*测试报告*.md
+*审查*.md
+*审核*.md
+*审计*.md
+*交付物*.md
+*闭环验证记录*.md
+*.MD
+/rbac_abac_architecture.svg
+/exit
+
+# --- 备份目录 ---
+backup/
+
+# --- 测试包 ---
+test-package/
+
+# --- Node.js（如适用） ---
+node_modules/
+package-lock.json
+
+# --- 临时文件 ---
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# --- 环境变量 / 密钥 ---
+.env
+.env.local
+*.pem
+*.key
+docker/ops-monitor.lock
+app/docker/ops-monitor.lock
+
+# --- 历史漂移副本 / 备份配置（生效运行目录为 app/docker/） ---
+docker/
+app/docker/*.bak
+app/docker/*.v0.bak
+
+# --- 运行时健康报告（SEC-4：真实运行数据不入库） ---
+data/health-reports/
+app/data/health-reports/

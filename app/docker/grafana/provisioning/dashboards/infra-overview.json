@@ -1,0 +1,761 @@
+{
+  "uid" : "ops-infra-overview",
+  "title" : "\uD83D\uDCCA Sentinel — 基础设施总览",
+  "tags" : [ "ops-monitor", "sentinel", "infra" ],
+  "timezone" : "browser",
+  "refresh" : "30s",
+  "time" : {
+    "from" : "now-1h",
+    "to" : "now"
+  },
+  "schemaVersion" : 39,
+  "version" : 8,
+  "templating" : {
+    "list" : [ {
+      "name" : "server_name",
+      "type" : "query",
+      "label" : "\uD83D\uDDA5 服务器",
+      "datasource" : {
+        "type" : "prometheus",
+        "uid" : "VictoriaMetrics"
+      },
+      "query" : "label_values(up{managed_by=\"ops-monitor\"},server_name)",
+      "refresh" : 2,
+      "includeAll" : true,
+      "allValue" : ".*",
+      "multi" : true
+    } ]
+  },
+  "panels" : [ {
+    "id" : 1,
+    "type" : "row",
+    "title" : "\uD83D\uDD25 L1 决策区 — 主机健康总览",
+    "gridPos" : {
+      "h" : 1,
+      "w" : 24,
+      "x" : 0,
+      "y" : 0
+    },
+    "collapsed" : false
+  }, {
+    "id" : 2,
+    "title" : "\uD83D\uDDA5 主机 CPU 健康蜂窝 — 颜色=CPU使用率",
+    "type" : "stat",
+    "description" : "每格代表一台主机，颜色表示 CPU 使用率。绿<70% 橙70-85% 红>85%。快速识别高负载主机。",
+    "gridPos" : {
+      "h" : 6,
+      "w" : 10,
+      "x" : 0,
+      "y" : 1
+    },
+    "datasource" : {
+      "type" : "prometheus",
+      "uid" : "VictoriaMetrics"
+    },
+    "options" : {
+      "reduceOptions" : {
+        "calcs" : [ "lastNotNull" ]
+      },
+      "orientation" : "auto",
+      "textMode" : "value_and_name",
+      "colorMode" : "background",
+      "graphMode" : "none"
+    },
+    "targets" : [ {
+      "expr" : "clamp_min(100 - (avg by(server_name)(irate(node_cpu_seconds_total{mode=\"idle\",server_name=~\"$server_name\"}[2m])) * 100), 0)",
+      "legendFormat" : "{{server_name}}",
+      "refId" : "A"
+    }, {
+      "expr" : "100 - (sum by(server_name)(rate(windows_cpu_time_total{mode=\"idle\",server_name=~\"$server_name\"}[5m])) / sum by(server_name)(rate(windows_cpu_time_total{server_name=~\"$server_name\"}[5m])) * 100)",
+      "legendFormat" : "{{server_name}} (Win)",
+      "refId" : "B"
+    } ],
+    "fieldConfig" : {
+      "defaults" : {
+        "unit" : "percent",
+        "min" : 0,
+        "max" : 100,
+        "decimals" : 1,
+        "thresholds" : {
+          "mode" : "absolute",
+          "steps" : [ {
+            "color" : "green",
+            "value" : null
+          }, {
+            "color" : "orange",
+            "value" : 70
+          }, {
+            "color" : "red",
+            "value" : 85
+          } ]
+        },
+        "color" : {
+          "mode" : "thresholds"
+        }
+      }
+    }
+  }, {
+    "id" : 3,
+    "title" : "\uD83E\uDDE0 主机内存蜂窝 — 颜色=内存使用率",
+    "type" : "stat",
+    "description" : "每格代表一台主机，颜色表示内存使用率。绿<70% 橙70-85% 红>85%。",
+    "gridPos" : {
+      "h" : 6,
+      "w" : 10,
+      "x" : 10,
+      "y" : 1
+    },
+    "datasource" : {
+      "type" : "prometheus",
+      "uid" : "VictoriaMetrics"
+    },
+    "options" : {
+      "reduceOptions" : {
+        "calcs" : [ "lastNotNull" ]
+      },
+      "orientation" : "auto",
+      "textMode" : "value_and_name",
+      "colorMode" : "background",
+      "graphMode" : "none"
+    },
+    "targets" : [ {
+      "expr" : "(1 - node_memory_MemAvailable_bytes{server_name=~\"$server_name\"} / node_memory_MemTotal_bytes{server_name=~\"$server_name\"}) * 100",
+      "legendFormat" : "{{server_name}}",
+      "refId" : "A"
+    }, {
+      "expr" : "(1 - windows_os_physical_memory_free_bytes{server_name=~\"$server_name\"} / windows_cs_physical_memory_bytes{server_name=~\"$server_name\"}) * 100",
+      "legendFormat" : "{{server_name}} (Win)",
+      "refId" : "B"
+    } ],
+    "fieldConfig" : {
+      "defaults" : {
+        "unit" : "percent",
+        "min" : 0,
+        "max" : 100,
+        "decimals" : 1,
+        "thresholds" : {
+          "mode" : "absolute",
+          "steps" : [ {
+            "color" : "green",
+            "value" : null
+          }, {
+            "color" : "orange",
+            "value" : 70
+          }, {
+            "color" : "red",
+            "value" : 85
+          } ]
+        },
+        "color" : {
+          "mode" : "thresholds"
+        }
+      }
+    }
+  }, {
+    "id" : 4,
+    "title" : "✅ 在线主机",
+    "type" : "stat",
+    "gridPos" : {
+      "h" : 3,
+      "w" : 4,
+      "x" : 20,
+      "y" : 1
+    },
+    "datasource" : {
+      "type" : "prometheus",
+      "uid" : "VictoriaMetrics"
+    },
+    "options" : {
+      "reduceOptions" : {
+        "calcs" : [ "lastNotNull" ]
+      },
+      "colorMode" : "background"
+    },
+    "targets" : [ {
+      "expr" : "count(up{exporter_type=~\"node|windows\",managed_by=\"ops-monitor\",server_name=~\"$server_name\"} == 1) or vector(0)",
+      "instant" : true,
+      "refId" : "A"
+    } ],
+    "fieldConfig" : {
+      "defaults" : {
+        "color" : {
+          "mode" : "fixed",
+          "fixedColor" : "green"
+        }
+      }
+    }
+  }, {
+    "id" : 5,
+    "title" : "\uD83D\uDD34 主机离线",
+    "type" : "stat",
+    "gridPos" : {
+      "h" : 3,
+      "w" : 4,
+      "x" : 20,
+      "y" : 4
+    },
+    "datasource" : {
+      "type" : "prometheus",
+      "uid" : "VictoriaMetrics"
+    },
+    "options" : {
+      "reduceOptions" : {
+        "calcs" : [ "lastNotNull" ]
+      },
+      "colorMode" : "background"
+    },
+    "targets" : [ {
+      "expr" : "count(up{exporter_type=~\"node|windows\",managed_by=\"ops-monitor\",server_name=~\"$server_name\"} == 0) or vector(0)",
+      "instant" : true,
+      "refId" : "A"
+    } ],
+    "fieldConfig" : {
+      "defaults" : {
+        "thresholds" : {
+          "steps" : [ {
+            "color" : "green",
+            "value" : null
+          }, {
+            "color" : "red",
+            "value" : 1
+          } ]
+        },
+        "color" : {
+          "mode" : "thresholds"
+        },
+        "mappings" : [ {
+          "type" : "value",
+          "options" : {
+            "0" : {
+              "text" : "全部在线 ✓",
+              "color" : "green"
+            }
+          }
+        } ]
+      }
+    }
+  }, {
+    "id" : 10,
+    "type" : "row",
+    "title" : "\uD83D\uDFE9 L2 运维值班层 — CPU & 内存热力图",
+    "gridPos" : {
+      "h" : 1,
+      "w" : 24,
+      "x" : 0,
+      "y" : 7
+    },
+    "collapsed" : false
+  }, {
+    "id" : 11,
+    "title" : "CPU 使用率热力图（多实例分布）",
+    "type" : "heatmap",
+    "description" : "Y轴：CPU使用率区间。X轴：时间。颜色深度：有多少台主机落在该区间。深红=多台主机高负载，危险。",
+    "gridPos" : {
+      "h" : 8,
+      "w" : 12,
+      "x" : 0,
+      "y" : 8
+    },
+    "datasource" : {
+      "type" : "prometheus",
+      "uid" : "VictoriaMetrics"
+    },
+    "targets" : [ {
+      "expr" : "clamp_min(100 - (avg by(server_name)(irate(node_cpu_seconds_total{mode=\"idle\",server_name=~\"$server_name\"}[2m])) * 100), 0)",
+      "legendFormat" : "{{server_name}}",
+      "refId" : "A"
+    } ],
+    "options" : {
+      "calculate" : false,
+      "yAxis" : {
+        "unit" : "percent",
+        "decimals" : 0
+      },
+      "color" : {
+        "mode" : "scheme",
+        "scheme" : "Spectral",
+        "reverse" : true,
+        "steps" : 64
+      },
+      "cellGap" : 1,
+      "tooltip" : {
+        "mode" : "single"
+      },
+      "legend" : {
+        "show" : true
+      }
+    },
+    "fieldConfig" : {
+      "defaults" : {
+        "custom" : {
+          "hideFrom" : {
+            "legend" : false,
+            "tooltip" : false,
+            "viz" : false
+          }
+        }
+      }
+    }
+  }, {
+    "id" : 12,
+    "title" : "内存使用率热力图（多实例分布）",
+    "type" : "heatmap",
+    "description" : "Y轴：内存使用率区间。X轴：时间。颜色深度表示集群内存压力分布。",
+    "gridPos" : {
+      "h" : 8,
+      "w" : 12,
+      "x" : 12,
+      "y" : 8
+    },
+    "datasource" : {
+      "type" : "prometheus",
+      "uid" : "VictoriaMetrics"
+    },
+    "targets" : [ {
+      "expr" : "(1 - node_memory_MemAvailable_bytes{server_name=~\"$server_name\"} / node_memory_MemTotal_bytes{server_name=~\"$server_name\"}) * 100",
+      "legendFormat" : "{{server_name}}",
+      "refId" : "A"
+    } ],
+    "options" : {
+      "calculate" : false,
+      "yAxis" : {
+        "unit" : "percent",
+        "decimals" : 0
+      },
+      "color" : {
+        "mode" : "scheme",
+        "scheme" : "Spectral",
+        "reverse" : true,
+        "steps" : 64
+      },
+      "cellGap" : 1,
+      "tooltip" : {
+        "mode" : "single"
+      },
+      "legend" : {
+        "show" : true
+      }
+    },
+    "fieldConfig" : {
+      "defaults" : {
+        "custom" : {
+          "hideFrom" : {
+            "legend" : false,
+            "tooltip" : false,
+            "viz" : false
+          }
+        }
+      }
+    }
+  }, {
+    "id" : 20,
+    "type" : "row",
+    "title" : "\uD83D\uDFE9 L2 相关性视图 — CPU / 内存趋势",
+    "gridPos" : {
+      "h" : 1,
+      "w" : 24,
+      "x" : 0,
+      "y" : 16
+    },
+    "collapsed" : false
+  }, {
+    "id" : 21,
+    "title" : "CPU 使用率趋势",
+    "type" : "timeseries",
+    "gridPos" : {
+      "h" : 7,
+      "w" : 12,
+      "x" : 0,
+      "y" : 17
+    },
+    "datasource" : {
+      "type" : "prometheus",
+      "uid" : "VictoriaMetrics"
+    },
+    "targets" : [ {
+      "expr" : "clamp_min(100 - (avg by(server_name)(irate(node_cpu_seconds_total{mode=\"idle\",server_name=~\"$server_name\"}[2m])) * 100), 0)",
+      "legendFormat" : "{{server_name}}",
+      "refId" : "A"
+    }, {
+      "expr" : "100 - (sum by(server_name)(rate(windows_cpu_time_total{mode=\"idle\",server_name=~\"$server_name\"}[5m])) / sum by(server_name)(rate(windows_cpu_time_total{server_name=~\"$server_name\"}[5m])) * 100)",
+      "legendFormat" : "{{server_name}} (Win)",
+      "refId" : "B"
+    } ],
+    "fieldConfig" : {
+      "defaults" : {
+        "unit" : "percent",
+        "min" : 0,
+        "max" : 100,
+        "custom" : {
+          "lineWidth" : 2,
+          "fillOpacity" : 8
+        },
+        "thresholds" : {
+          "steps" : [ {
+            "color" : "green",
+            "value" : null
+          }, {
+            "color" : "orange",
+            "value" : 70
+          }, {
+            "color" : "red",
+            "value" : 85
+          } ]
+        },
+        "color" : {
+          "mode" : "palette-classic"
+        }
+      }
+    },
+    "options" : {
+      "tooltip" : {
+        "mode" : "multi"
+      },
+      "legend" : {
+        "displayMode" : "list",
+        "placement" : "bottom"
+      }
+    }
+  }, {
+    "id" : 22,
+    "title" : "内存使用趋势",
+    "type" : "timeseries",
+    "gridPos" : {
+      "h" : 7,
+      "w" : 12,
+      "x" : 12,
+      "y" : 17
+    },
+    "datasource" : {
+      "type" : "prometheus",
+      "uid" : "VictoriaMetrics"
+    },
+    "targets" : [ {
+      "expr" : "(1 - node_memory_MemAvailable_bytes{server_name=~\"$server_name\"} / node_memory_MemTotal_bytes{server_name=~\"$server_name\"}) * 100",
+      "legendFormat" : "{{server_name}}",
+      "refId" : "A"
+    }, {
+      "expr" : "(1 - windows_os_physical_memory_free_bytes{server_name=~\"$server_name\"} / windows_cs_physical_memory_bytes{server_name=~\"$server_name\"}) * 100",
+      "legendFormat" : "{{server_name}} (Win)",
+      "refId" : "B"
+    } ],
+    "fieldConfig" : {
+      "defaults" : {
+        "unit" : "percent",
+        "min" : 0,
+        "max" : 100,
+        "custom" : {
+          "lineWidth" : 2,
+          "fillOpacity" : 8
+        },
+        "color" : {
+          "mode" : "palette-classic"
+        }
+      }
+    },
+    "options" : {
+      "tooltip" : {
+        "mode" : "multi"
+      },
+      "legend" : {
+        "displayMode" : "list",
+        "placement" : "bottom"
+      }
+    }
+  }, {
+    "id" : 30,
+    "type" : "row",
+    "title" : "\uD83D\uDFE8 L2 磁盘预测 & 网络",
+    "gridPos" : {
+      "h" : 1,
+      "w" : 24,
+      "x" : 0,
+      "y" : 24
+    },
+    "collapsed" : false
+  }, {
+    "id" : 31,
+    "title" : "\uD83D\uDCBE 磁盘预计填满时间 — predict_linear",
+    "type" : "gauge",
+    "description" : "基于过去6小时磁盘增长速率，预测磁盘填满所需时间（小时）。红<24h 橙24-72h 绿>72h。0=已满/无数据。",
+    "gridPos" : {
+      "h" : 6,
+      "w" : 10,
+      "x" : 0,
+      "y" : 25
+    },
+    "datasource" : {
+      "type" : "prometheus",
+      "uid" : "VictoriaMetrics"
+    },
+    "options" : {
+      "reduceOptions" : {
+        "calcs" : [ "lastNotNull" ]
+      },
+      "orientation" : "auto"
+    },
+    "targets" : [ {
+      "expr" : "clamp_min(max by(server_name) (node_filesystem_avail_bytes{fstype!~\"tmpfs|overlay|squashfs\",server_name=~\"$server_name\"} / -predict_linear(node_filesystem_avail_bytes{fstype!~\"tmpfs|overlay|squashfs\",server_name=~\"$server_name\"}[6h], 1) / 3600), 0)",
+      "legendFormat" : "{{server_name}} /",
+      "instant" : true,
+      "refId" : "A"
+    } ],
+    "fieldConfig" : {
+      "defaults" : {
+        "unit" : "h",
+        "min" : 0,
+        "max" : 720,
+        "decimals" : 1,
+        "thresholds" : {
+          "mode" : "absolute",
+          "steps" : [ {
+            "color" : "red",
+            "value" : null
+          }, {
+            "color" : "orange",
+            "value" : 24
+          }, {
+            "color" : "green",
+            "value" : 72
+          } ]
+        },
+        "color" : {
+          "mode" : "thresholds"
+        }
+      }
+    }
+  }, {
+    "id" : 32,
+    "title" : "磁盘使用率明细",
+    "type" : "table",
+    "gridPos" : {
+      "h" : 6,
+      "w" : 14,
+      "x" : 10,
+      "y" : 25
+    },
+    "datasource" : {
+      "type" : "prometheus",
+      "uid" : "VictoriaMetrics"
+    },
+    "targets" : [ {
+      "expr" : "max by(server_name) ((1 - node_filesystem_avail_bytes{fstype!~\"tmpfs|overlay|squashfs\",server_name=~\"$server_name\"} / node_filesystem_size_bytes{fstype!~\"tmpfs|overlay|squashfs\",server_name=~\"$server_name\"}) * 100)",
+      "format" : "table",
+      "instant" : true,
+      "refId" : "A"
+    }, {
+      "expr" : "(1 - windows_logical_disk_free_bytes{volume!~\"HarddiskVolume.*\",server_name=~\"$server_name\"} / windows_logical_disk_size_bytes{volume!~\"HarddiskVolume.*\",server_name=~\"$server_name\"}) * 100",
+      "format" : "table",
+      "instant" : true,
+      "refId" : "B"
+    } ],
+    "transformations" : [ {
+      "id" : "merge",
+      "options" : { }
+    }, {
+      "id" : "organize",
+      "options" : {
+        "excludeByName" : {
+          "Time" : true,
+          "__name__" : true,
+          "job" : true,
+          "managed_by" : true,
+          "server_id" : true,
+          "exporter_type" : true,
+          "node" : true,
+          "exporter_id" : true
+        },
+        "renameByName" : {
+          "server_name" : "服务器",
+          "mountpoint" : "挂载点",
+          "volume" : "磁盘",
+          "fstype" : "类型",
+          "Value" : "使用率%"
+        }
+      }
+    } ],
+    "fieldConfig" : {
+      "defaults" : {
+        "unit" : "percent",
+        "decimals" : 1
+      },
+      "overrides" : [ {
+        "matcher" : {
+          "id" : "byName",
+          "options" : "使用率%"
+        },
+        "properties" : [ {
+          "id" : "custom.displayMode",
+          "value" : "color-background"
+        }, {
+          "id" : "thresholds",
+          "value" : {
+            "steps" : [ {
+              "color" : "green",
+              "value" : null
+            }, {
+              "color" : "orange",
+              "value" : 70
+            }, {
+              "color" : "red",
+              "value" : 85
+            } ]
+          }
+        } ]
+      } ]
+    }
+  }, {
+    "id" : 33,
+    "title" : "网络流量（收/发）",
+    "type" : "timeseries",
+    "gridPos" : {
+      "h" : 6,
+      "w" : 24,
+      "x" : 0,
+      "y" : 31
+    },
+    "datasource" : {
+      "type" : "prometheus",
+      "uid" : "VictoriaMetrics"
+    },
+    "targets" : [ {
+      "expr" : "rate(node_network_receive_bytes_total{device!~\"lo|docker.*|br-.*|veth.*\",server_name=~\"$server_name\"}[5m])",
+      "legendFormat" : "{{server_name}} ↓{{device}}",
+      "refId" : "A"
+    }, {
+      "expr" : "rate(node_network_transmit_bytes_total{device!~\"lo|docker.*|br-.*|veth.*\",server_name=~\"$server_name\"}[5m])",
+      "legendFormat" : "{{server_name}} ↑{{device}}",
+      "refId" : "B"
+    }, {
+      "expr" : "rate(windows_net_bytes_received_total{nic!~\".*Loopback.*|.*isatap.*\",server_name=~\"$server_name\"}[5m])",
+      "legendFormat" : "{{server_name}} ↓{{nic}} (Win)",
+      "refId" : "C"
+    }, {
+      "expr" : "rate(windows_net_bytes_sent_total{nic!~\".*Loopback.*|.*isatap.*\",server_name=~\"$server_name\"}[5m])",
+      "legendFormat" : "{{server_name}} ↑{{nic}} (Win)",
+      "refId" : "D"
+    } ],
+    "fieldConfig" : {
+      "defaults" : {
+        "unit" : "Bps",
+        "custom" : {
+          "lineWidth" : 2,
+          "fillOpacity" : 6
+        },
+        "color" : {
+          "mode" : "palette-classic"
+        }
+      }
+    },
+    "options" : {
+      "tooltip" : {
+        "mode" : "multi"
+      },
+      "legend" : {
+        "displayMode" : "list",
+        "placement" : "bottom"
+      }
+    }
+  }, {
+    "id" : 40,
+    "type" : "row",
+    "title" : "⚫ L3 专家诊断层 — 异常检测 & 单机详情（折叠）",
+    "gridPos" : {
+      "h" : 1,
+      "w" : 24,
+      "x" : 0,
+      "y" : 37
+    },
+    "collapsed" : true,
+    "panels" : [ {
+      "id" : 41,
+      "title" : "CPU Z-score 异常检测",
+      "type" : "timeseries",
+      "description" : "Z-score = (当前CPU - 1h均值) / 1h标准差。|Z|>3 代表统计异常（偏离正常3个标准差）。红色超标线=异常阈值。",
+      "gridPos" : {
+        "h" : 8,
+        "w" : 12,
+        "x" : 0,
+        "y" : 38
+      },
+      "datasource" : {
+        "type" : "prometheus",
+        "uid" : "VictoriaMetrics"
+      },
+      "targets" : [ {
+        "expr" : "(100 - avg by(server_name)(irate(node_cpu_seconds_total{mode=\"idle\",server_name=~\"$server_name\"}[2m])) * 100 - avg_over_time((100 - avg by(server_name)(irate(node_cpu_seconds_total{mode=\"idle\",server_name=~\"$server_name\"}[2m])) * 100)[1h:5m])) / stddev_over_time((100 - avg by(server_name)(irate(node_cpu_seconds_total{mode=\"idle\",server_name=~\"$server_name\"}[2m])) * 100)[1h:5m])",
+        "legendFormat" : "{{server_name}} Z-score",
+        "refId" : "A"
+      }, {
+        "expr" : "vector(3)",
+        "legendFormat" : "异常阈值 +3σ",
+        "refId" : "B"
+      }, {
+        "expr" : "vector(-3)",
+        "legendFormat" : "异常阈值 -3σ",
+        "refId" : "C"
+      } ],
+      "fieldConfig" : {
+        "defaults" : {
+          "custom" : {
+            "lineWidth" : 2
+          },
+          "color" : {
+            "mode" : "palette-classic"
+          }
+        }
+      },
+      "options" : {
+        "tooltip" : {
+          "mode" : "multi"
+        }
+      }
+    }, {
+      "id" : 42,
+      "title" : "磁盘趋势预测（predict_linear 未来24h）",
+      "type" : "timeseries",
+      "description" : "实线=实际磁盘使用率，虚线=predict_linear 预测趋势。超过85%红线需扩容。",
+      "gridPos" : {
+        "h" : 8,
+        "w" : 12,
+        "x" : 12,
+        "y" : 38
+      },
+      "datasource" : {
+        "type" : "prometheus",
+        "uid" : "VictoriaMetrics"
+      },
+      "targets" : [ {
+        "expr" : "max by(server_name) ((1 - node_filesystem_avail_bytes{fstype!~\"tmpfs|overlay|squashfs\",server_name=~\"$server_name\"} / node_filesystem_size_bytes{fstype!~\"tmpfs|overlay|squashfs\",server_name=~\"$server_name\"}) * 100)",
+        "legendFormat" : "{{server_name}} 当前使用率",
+        "refId" : "A"
+      }, {
+        "expr" : "max by(server_name) ((1 - (node_filesystem_avail_bytes{fstype!~\"tmpfs|overlay|squashfs\",server_name=~\"$server_name\"} + predict_linear(node_filesystem_avail_bytes{fstype!~\"tmpfs|overlay|squashfs\",server_name=~\"$server_name\"}[6h], 86400)) / node_filesystem_size_bytes{fstype!~\"tmpfs|overlay|squashfs\",server_name=~\"$server_name\"}) * 100)",
+        "legendFormat" : "{{server_name}} 预测(+24h)",
+        "refId" : "B"
+      }, {
+        "expr" : "vector(85)",
+        "legendFormat" : "警戒线 85%",
+        "refId" : "C"
+      } ],
+      "fieldConfig" : {
+        "defaults" : {
+          "unit" : "percent",
+          "min" : 0,
+          "max" : 100,
+          "custom" : {
+            "lineWidth" : 2
+          },
+          "color" : {
+            "mode" : "palette-classic"
+          }
+        }
+      },
+      "options" : {
+        "tooltip" : {
+          "mode" : "multi"
+        }
+      }
+    } ]
+  } ]
+}
