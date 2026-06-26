@@ -149,16 +149,17 @@ ops-monitor/
   README.en.md
 ```
 
-## Public Release Scope
+## Requirements and Contributions
 
-The public repository should contain only source code, public runtime config templates, public screenshots, and README files. The following are intentionally excluded:
+Issues and pull requests are welcome, especially around enterprise monitoring, automated diagnosis, and operations workflows. Good contribution areas include:
 
-- Internal implementation reports, delivery review records, validation records, and project construction notes.
-- Agent instructions, personal workflow rules, roadmaps, product drafts, and internal test plans.
-- Runtime data, audit logs, health reports, lock files, real targets, backup configs, and historical duplicate config directories.
-- `.env`, private keys, certificates, real passwords, tokens, cookies, or production secrets.
+- New exporter templates, such as PostgreSQL, MySQL, Redis, Nginx, Windows, JVM, or custom business metrics.
+- Alert rules, recording rules, Grafana dashboards, and service topology improvements.
+- Sentinel diagnosis rules, incident classification, runbook step types, and execution result views.
+- RBAC, audit logs, input validation, deployment security, and production configuration experience.
+- Documentation, installation scripts, sample configs, screenshots, and troubleshooting guides.
 
-If any of these files were already tracked by Git, adding them to `.gitignore` is not enough. Remove them from the Git index before the first public push.
+When opening an issue, please describe the scenario, target environment, expected behavior, and reproduction steps. When submitting a PR, keep the change focused and include build or manual verification notes.
 
 ## Security Notes
 

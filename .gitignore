@@ -45,7 +45,7 @@ skills-lock.json
 app/skills-lock.json
 app/skills/
 
-# --- 开源排除：内部建设资料 / Agent 约束 / 交付审查记录 ---
+# --- 项目文档草稿 / 本地工作流文件 ---
 z/
 CLAUDE.md
 AGENTS.md
